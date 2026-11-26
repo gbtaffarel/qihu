@@ -18,6 +18,7 @@ CLEAN_ISO=false
 ALL_DEVICES=false
 SKIP_DEPS_CHECK=false
 SETUP_UDEV=false
+WITH_RTL=false
 
 usage() {
   cat <<EOF
@@ -30,6 +31,7 @@ Opções:
   --clean-iso         Remover o .iso após a instalação
   --all-devices       Instalar também MAX, Arria e Cyclone V (padrão: apenas Cyclone II/III/IV)
   --setup-udev        Configurar regra udev para USB-Blaster (usa sudo)
+  --with-rtl          Instalar dependências de visualização RTL (yosys, netlistsvg e DigitalJS)
   --skip-deps         Pular verificação de bibliotecas 32-bit
   -h, --help          Mostrar esta ajuda
 EOF
@@ -43,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     --clean-iso)   CLEAN_ISO=true; shift ;;
     --all-devices) ALL_DEVICES=true; shift ;;
     --setup-udev)  SETUP_UDEV=true; shift ;;
+    --with-rtl)    WITH_RTL=true; shift ;;
     --skip-deps)   SKIP_DEPS_CHECK=true; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) echo "Opção desconhecida: $1" >&2; usage; exit 1 ;;
@@ -363,11 +366,17 @@ cmd_rtl() {
 
   mkdir -p build
   local digitaljs_render="\${DIGITALJS_RENDER:-\$HOME/.local/share/digitaljs/render.js}"
+  local netlistsvg_bin=""
+  if command -v netlistsvg >/dev/null 2>&1; then
+    netlistsvg_bin="netlistsvg"
+  elif [[ -x "\$HOME/.local/share/digitaljs/node_modules/.bin/netlistsvg" ]]; then
+    netlistsvg_bin="\$HOME/.local/share/digitaljs/node_modules/.bin/netlistsvg"
+  fi
 
   if [[ "\$mode" == "auto" ]]; then
-    if [[ -f "\$digitaljs_render" ]] && command -v node >/dev/null 2>&1; then
+    if [[ -f "\$digitaljs_render" ]] && command -v node >/dev/null 2>&1 && command -v yosys >/dev/null 2>&1; then
       mode="digitaljs"
-    elif command -v yosys >/dev/null 2>&1 && command -v netlistsvg >/dev/null 2>&1; then
+    elif command -v yosys >/dev/null 2>&1 && [[ -n "\$netlistsvg_bin" ]]; then
       mode="svg"
     else
       mode="quartus"
@@ -376,8 +385,9 @@ cmd_rtl() {
 
   case "\$mode" in
     digitaljs)
-      if [[ ! -f "\$digitaljs_render" ]] || ! command -v node >/dev/null 2>&1; then
-        echo "Erro: DigitalJS (\$digitaljs_render) ou node não encontrado." >&2
+      if [[ ! -f "\$digitaljs_render" ]] || ! command -v node >/dev/null 2>&1 || ! command -v yosys >/dev/null 2>&1; then
+        echo "Erro: DigitalJS (\$digitaljs_render), node ou yosys não encontrado." >&2
+        echo "Instale com: quartus update --with-rtl" >&2
         exit 1
       fi
       local html_out="build/\${top_name}_rtl.html"
@@ -387,15 +397,16 @@ cmd_rtl() {
       nohup xdg-open "\$html_out" >/dev/null 2>&1 &
       ;;
     svg)
-      if ! command -v yosys >/dev/null 2>&1 || ! command -v netlistsvg >/dev/null 2>&1; then
-        echo "Erro: yosys ou netlistsvg não encontrados no PATH." >&2
+      if ! command -v yosys >/dev/null 2>&1 || [[ -z "\$netlistsvg_bin" ]]; then
+        echo "Erro: yosys ou netlistsvg não encontrados." >&2
+        echo "Instale com: quartus update --with-rtl" >&2
         exit 1
       fi
       local json_out="build/\${top_name}_rtl.json"
       local svg_out="build/\${top_name}_rtl.svg"
       echo "[quartus] Gerando RTL SVG (Yosys + netlistsvg) para '\$top_name'..."
       yosys -q -p "read_verilog \${srcs[*]}; prep -top \$top_name; write_json \$json_out"
-      netlistsvg "\$json_out" -o "\$svg_out"
+      "\$netlistsvg_bin" "\$json_out" -o "\$svg_out"
       echo "[quartus] Abrindo \$svg_out..."
       nohup xdg-open "\$svg_out" >/dev/null 2>&1 &
       ;;
@@ -533,9 +544,143 @@ check_path() {
   esac
 }
 
+install_rtl_deps() {
+  if [[ "$WITH_RTL" != true ]]; then
+    return 0
+  fi
+
+  log "Instalando dependências de visualização RTL (yosys, nodejs/npm, netlistsvg, digitaljs)..."
+  if ! command -v yosys >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    if command -v pacman >/dev/null 2>&1; then
+      sudo pacman -S --needed --noconfirm yosys nodejs npm
+    elif command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update && sudo apt-get install -y yosys nodejs npm
+    elif command -v dnf >/dev/null 2>&1; then
+      sudo dnf install -y yosys nodejs npm
+    elif command -v zypper >/dev/null 2>&1; then
+      sudo zypper install -y yosys nodejs npm
+    else
+      err "Gerenciador de pacotes não reconhecido. Instale 'yosys', 'nodejs' e 'npm' manualmente."
+      exit 1
+    fi
+  fi
+
+  local djs_dir="${HOME}/.local/share/digitaljs"
+  mkdir -p "$djs_dir"
+  if [[ ! -f "$djs_dir/package.json" ]]; then
+    npm init -y --prefix "$djs_dir" >/dev/null 2>&1 || true
+  fi
+  npm install --prefix "$djs_dir" digitaljs yosys2digitaljs netlistsvg
+
+  if [[ ! -f "$djs_dir/render.js" ]]; then
+    cat > "$djs_dir/render.js" <<'RENDERJS'
+#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const os = require('os');
+
+const { process: y2dProcess } = require(path.join(__dirname, 'node_modules/yosys2digitaljs/dist/index.js'));
+const { yosys2digitaljs, io_ui } = require(path.join(__dirname, 'node_modules/yosys2digitaljs/dist/core.js'));
+
+const args = process.argv.slice(2);
+let outFile = 'build/digitaljs.html';
+let topModule = '';
+const files = [];
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '-o' && i + 1 < args.length) outFile = args[++i];
+  else if (args[i] === '--top' && i + 1 < args.length) topModule = args[++i];
+  else files.push(args[i]);
+}
+
+if (files.length === 0) {
+  console.error('Uso: render.js [-o out.html] [--top modulo] <arquivos.v...>');
+  process.exit(1);
+}
+
+const distDir = path.join(__dirname, 'node_modules/digitaljs/dist');
+
+async function main() {
+  let circuitJson;
+  if (topModule) {
+    const tmpJson = path.join(os.tmpdir(), `y2d_${process.pid}_${Date.now()}.json`);
+    const script = `read_verilog ${files.join(' ')}; prep -top ${topModule}; write_json ${tmpJson}`;
+    execFileSync('yosys', ['-q', '-p', script], { stdio: 'inherit' });
+    const yosysOut = JSON.parse(fs.readFileSync(tmpJson, 'utf8'));
+    fs.unlinkSync(tmpJson);
+    circuitJson = yosys2digitaljs(yosysOut, {});
+    io_ui(circuitJson);
+  } else {
+    const res = await y2dProcess(files, process.cwd(), {});
+    circuitJson = res.output;
+    io_ui(circuitJson);
+  }
+
+  const title = topModule || path.basename(files[0], path.extname(files[0]));
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>DigitalJS - ${title}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background: #fafafa; color: #222; }
+    .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    button { padding: 6px 12px; cursor: pointer; }
+    #paper { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px; overflow: auto; }
+    #iopanel, #monitor { margin-top: 12px; }
+  </style>
+  <script defer="defer" src="file://${distDir}/main.js"></script>
+</head>
+<body>
+  <div class="toolbar">
+    <button name="start" type="button">▶ Start</button>
+    <button name="stop" type="button">⏹ Stop</button>
+    <label><input name="fixed" type="checkbox"> Fixed Mode</label>
+  </div>
+  <div id="paper"></div>
+  <div id="iopanel"></div>
+  <div id="monitor"></div>
+  <script>
+    const CIRCUIT_JSON = ${JSON.stringify(circuitJson)};
+    document.addEventListener('DOMContentLoaded', () => {
+      const start = $('button[name=start]');
+      const stop = $('button[name=stop]');
+      const papers = {};
+      const fixed = (val) => Object.values(papers).forEach(p => p.fixed(val));
+      const circuit = new digitaljs.Circuit(CIRCUIT_JSON);
+      const monitor = new digitaljs.Monitor(circuit);
+      new digitaljs.MonitorView({ model: monitor, el: $('#monitor') });
+      new digitaljs.IOPanelView({ model: circuit, el: $('#iopanel') });
+      circuit.on('new:paper', (paper) => { paper.fixed($('input[name=fixed]').prop('checked')); papers[paper.cid] = paper; });
+      circuit.on('remove:paper', (paper) => delete papers[paper.cid]);
+      circuit.on('changeRunning', () => { start.prop('disabled', circuit.running); stop.prop('disabled', !circuit.running); });
+      circuit.displayOn($('#paper'));
+      fixed($('input[name=fixed]').prop('checked'));
+      circuit.start();
+      start.on('click', () => circuit.start());
+      stop.on('click', () => circuit.stop());
+      $('input[name=fixed]').change(function () { fixed($(this).prop('checked')); });
+    });
+  </script>
+</body>
+</html>`;
+
+  fs.mkdirSync(path.dirname(outFile), { recursive: true });
+  fs.writeFileSync(outFile, html, 'utf8');
+  console.log(\`Gerado \${outFile}\`);
+}
+
+main().catch((err) => { console.error(err.message || err); process.exit(1); });
+RENDERJS
+    chmod +x "$djs_dir/render.js"
+  fi
+}
+
 main() {
   check_32bit_deps
   install_quartus
+  install_rtl_deps
   install_cli_wrapper
   install_desktop_entry
   setup_udev_rules

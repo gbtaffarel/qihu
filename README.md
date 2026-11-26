@@ -18,6 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/gbtaffarel/quartus-installer/main/i
 - `--iso /caminho/para/Quartus-web-13.0.1.232.iso` — usa um ISO já baixado
 - `--clean-iso` — remove o ISO após instalar
 - `--setup-udev` — configura permissões do USB-Blaster em `/etc/udev/rules.d/` (usa `sudo`)
+- `--with-rtl` — instala `yosys`, `netlistsvg` e `DigitalJS` para o comando `quartus rtl` (usa `sudo` apenas para `yosys`/`nodejs`/`npm`)
 - `--all-devices` — inclui MAX, Arria e Cyclone V além de Cyclone II/III/IV
 - `--install-dir DIR` — diretório de instalação (padrão: `~/altera/13.0sp1`)
 - `--bin-dir DIR` — diretório do executável `quartus` (padrão: `~/.local/bin`)

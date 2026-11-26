@@ -199,7 +199,8 @@ Uso: quartus <comando> [argumentos]
 Comandos:
   compile <toplevel> [arquivos...]   Compila o projeto (gera .qpf/.qsf se não existir)
   compile                            Compila o .qpf existente no diretório atual
-  rtl <toplevel.v> [arquivos...]     Visualiza o esquemático RTL (DigitalJS, Yosys+netlistsvg ou Quartus)
+  rtl [--digitaljs|--svg|--quartus] <toplevel.v> [arquivos...]
+                                     Visualiza o esquemático RTL (padrão: auto)
   fpga [arquivo.sof]                 Grava o bitstream (.sof) na FPGA via USB-Blaster
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
@@ -312,8 +313,19 @@ cmd_fpga() {
 }
 
 cmd_rtl() {
+  local mode="auto"
+  while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+      --digitaljs) mode="digitaljs"; shift ;;
+      --svg|--yosys) mode="svg"; shift ;;
+      --quartus|--viewer) mode="quartus"; shift ;;
+      --auto) mode="auto"; shift ;;
+      *) break ;;
+    esac
+  done
+
   if [[ \$# -eq 0 ]]; then
-    echo "Uso: quartus rtl <arquivo_toplevel.v> [dependencias...]" >&2
+    echo "Uso: quartus rtl [--digitaljs|--svg|--quartus] <arquivo_toplevel.v> [dependencias...]" >&2
     exit 1
   fi
 
@@ -352,31 +364,53 @@ cmd_rtl() {
   mkdir -p build
   local digitaljs_render="\${DIGITALJS_RENDER:-\$HOME/.local/share/digitaljs/render.js}"
 
-  if [[ -f "\$digitaljs_render" ]] && command -v node >/dev/null 2>&1; then
-    local html_out="build/\${top_name}_rtl.html"
-    echo "[quartus] Gerando RTL interativo (DigitalJS) para '\$top_name'..."
-    node "\$digitaljs_render" --top "\$top_name" -o "\$html_out" "\${srcs[@]}"
-    echo "[quartus] Abrindo \$html_out..."
-    nohup xdg-open "\$html_out" >/dev/null 2>&1 &
-  elif command -v yosys >/dev/null 2>&1 && command -v netlistsvg >/dev/null 2>&1; then
-    local json_out="build/\${top_name}_rtl.json"
-    local svg_out="build/\${top_name}_rtl.svg"
-    echo "[quartus] Gerando RTL SVG (Yosys + netlistsvg) para '\$top_name'..."
-    yosys -q -p "read_verilog \${srcs[*]}; prep -top \$top_name; write_json \$json_out"
-    netlistsvg "\$json_out" -o "\$svg_out"
-    echo "[quartus] Abrindo \$svg_out..."
-    nohup xdg-open "\$svg_out" >/dev/null 2>&1 &
-  else
-    ensure_quartus
-    echo "[quartus] Sintetizando '\$top_name' com Quartus para abrir no RTL Viewer..."
-    if [[ ! -f "\$top_name.qpf" || ! -f "\$top_name.qsf" ]]; then
-      cmd_compile "\$top_name" "\${srcs[@]}" >/dev/null
+  if [[ "\$mode" == "auto" ]]; then
+    if [[ -f "\$digitaljs_render" ]] && command -v node >/dev/null 2>&1; then
+      mode="digitaljs"
+    elif command -v yosys >/dev/null 2>&1 && command -v netlistsvg >/dev/null 2>&1; then
+      mode="svg"
     else
-      "\$QUARTUS_BIN/quartus_map" --read_settings_files=on --write_settings_files=off "\$top_name" -c "\$top_name"
+      mode="quartus"
     fi
-    echo "[quartus] Abrindo Quartus GUI (acesse Tools -> Netlist Viewers -> RTL Viewer)..."
-    nohup "\$QUARTUS_BIN/quartus" "\$top_name.qpf" >/dev/null 2>&1 &
   fi
+
+  case "\$mode" in
+    digitaljs)
+      if [[ ! -f "\$digitaljs_render" ]] || ! command -v node >/dev/null 2>&1; then
+        echo "Erro: DigitalJS (\$digitaljs_render) ou node não encontrado." >&2
+        exit 1
+      fi
+      local html_out="build/\${top_name}_rtl.html"
+      echo "[quartus] Gerando RTL interativo (DigitalJS) para '\$top_name'..."
+      node "\$digitaljs_render" --top "\$top_name" -o "\$html_out" "\${srcs[@]}"
+      echo "[quartus] Abrindo \$html_out..."
+      nohup xdg-open "\$html_out" >/dev/null 2>&1 &
+      ;;
+    svg)
+      if ! command -v yosys >/dev/null 2>&1 || ! command -v netlistsvg >/dev/null 2>&1; then
+        echo "Erro: yosys ou netlistsvg não encontrados no PATH." >&2
+        exit 1
+      fi
+      local json_out="build/\${top_name}_rtl.json"
+      local svg_out="build/\${top_name}_rtl.svg"
+      echo "[quartus] Gerando RTL SVG (Yosys + netlistsvg) para '\$top_name'..."
+      yosys -q -p "read_verilog \${srcs[*]}; prep -top \$top_name; write_json \$json_out"
+      netlistsvg "\$json_out" -o "\$svg_out"
+      echo "[quartus] Abrindo \$svg_out..."
+      nohup xdg-open "\$svg_out" >/dev/null 2>&1 &
+      ;;
+    quartus)
+      ensure_quartus
+      echo "[quartus] Sintetizando '\$top_name' com Quartus para abrir no RTL Viewer..."
+      if [[ ! -f "\$top_name.qpf" || ! -f "\$top_name.qsf" ]]; then
+        cmd_compile "\$top_name" "\${srcs[@]}" >/dev/null
+      else
+        "\$QUARTUS_BIN/quartus_map" --read_settings_files=on --write_settings_files=off "\$top_name" -c "\$top_name"
+      fi
+      echo "[quartus] Abrindo Quartus GUI (acesse Tools -> Netlist Viewers -> RTL Viewer)..."
+      nohup "\$QUARTUS_BIN/quartus" "\$top_name.qpf" >/dev/null 2>&1 &
+      ;;
+  esac
 }
 
 cmd_update() {

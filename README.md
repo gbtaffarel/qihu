@@ -31,8 +31,12 @@ quartus compile booth_top booth_top.v booth_control.v booth_datapath.v
 # Compilar um projeto .qpf já existente no diretório atual
 quartus compile
 
-# Visualizar o esquemático RTL (DigitalJS, Yosys+netlistsvg ou Quartus RTL Viewer)
+# Visualizar o esquemático RTL (automático: DigitalJS -> Yosys+netlistsvg -> Quartus)
 quartus rtl booth_top.v
+# Ou escolher explicitamente o visualizador:
+quartus rtl --digitaljs booth_top.v
+quartus rtl --svg booth_top.v
+quartus rtl --quartus booth_top.v
 
 # Enviar o .sof gerado para a FPGA via USB-Blaster
 quartus fpga

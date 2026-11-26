@@ -183,7 +183,7 @@ install_cli_wrapper() {
   local target="$BIN_DIR/quartus"
 
   log "Instalando comando 'quartus' em $target..."
-  cat > "$target" <<EOF
+  cat > "$target.tmp" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -481,7 +481,8 @@ case "\${1:-gui}" in
   *)         ensure_quartus; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;
 esac
 EOF
-  chmod +x "$target"
+  chmod +x "$target.tmp"
+  mv -f "$target.tmp" "$target"
 }
 
 # ------------------------------------------------------------------------------

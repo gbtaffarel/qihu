@@ -199,6 +199,7 @@ Uso: quartus <comando> [argumentos]
 Comandos:
   compile <toplevel> [arquivos...]   Compila o projeto (gera .qpf/.qsf se não existir)
   compile                            Compila o .qpf existente no diretório atual
+  rtl <toplevel.v> [arquivos...]     Visualiza o esquemático RTL (DigitalJS, Yosys+netlistsvg ou Quartus)
   fpga [arquivo.sof]                 Grava o bitstream (.sof) na FPGA via USB-Blaster
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
@@ -308,8 +309,77 @@ cmd_fpga() {
   "\$QUARTUS_BIN/quartus_pgm" -m jtag -o "p;\$sof"
 }
 
+cmd_rtl() {
+  if [[ \$# -eq 0 ]]; then
+    echo "Uso: quartus rtl <arquivo_toplevel.v> [dependencias...]" >&2
+    exit 1
+  fi
+
+  local top_arg="\$1"
+  shift
+  local top_name="\$(basename "\$top_arg")"
+  top_name="\${top_name%.*}"
+
+  local srcs=()
+  if [[ \$# -gt 0 ]]; then
+    if [[ -f "\$top_arg" ]]; then
+      srcs=("\$top_arg" "\$@")
+    else
+      srcs=("\$@")
+    fi
+  else
+    # Se só o toplevel foi passado, coleta os demais .v/.sv do diretório (ignorando testbenches)
+    shopt -s nullglob
+    for f in *.v *.sv; do
+      case "\$f" in
+        *tb*.v|*testbench*.v|*tb*.sv|*testbench*.sv) continue ;;
+        *) srcs+=("\$f") ;;
+      esac
+    done
+    shopt -u nullglob
+    if [[ \${#srcs[@]} -eq 0 && -f "\$top_arg" ]]; then
+      srcs=("\$top_arg")
+    fi
+  fi
+
+  if [[ \${#srcs[@]} -eq 0 ]]; then
+    echo "Erro: nenhum arquivo HDL encontrado para gerar o RTL." >&2
+    exit 1
+  fi
+
+  mkdir -p build
+  local digitaljs_render="\${DIGITALJS_RENDER:-\$HOME/.local/share/digitaljs/render.js}"
+
+  if [[ -f "\$digitaljs_render" ]] && command -v node >/dev/null 2>&1; then
+    local html_out="build/\${top_name}_rtl.html"
+    echo "[quartus] Gerando RTL interativo (DigitalJS) para '\$top_name'..."
+    node "\$digitaljs_render" --top "\$top_name" -o "\$html_out" "\${srcs[@]}"
+    echo "[quartus] Abrindo \$html_out..."
+    nohup xdg-open "\$html_out" >/dev/null 2>&1 &
+  elif command -v yosys >/dev/null 2>&1 && command -v netlistsvg >/dev/null 2>&1; then
+    local json_out="build/\${top_name}_rtl.json"
+    local svg_out="build/\${top_name}_rtl.svg"
+    echo "[quartus] Gerando RTL SVG (Yosys + netlistsvg) para '\$top_name'..."
+    yosys -q -p "read_verilog \${srcs[*]}; prep -top \$top_name; write_json \$json_out"
+    netlistsvg "\$json_out" -o "\$svg_out"
+    echo "[quartus] Abrindo \$svg_out..."
+    nohup xdg-open "\$svg_out" >/dev/null 2>&1 &
+  else
+    ensure_quartus
+    echo "[quartus] Sintetizando '\$top_name' com Quartus para abrir no RTL Viewer..."
+    if [[ ! -f "\$top_name.qpf" || ! -f "\$top_name.qsf" ]]; then
+      cmd_compile "\$top_name" "\${srcs[@]}" >/dev/null
+    else
+      "\$QUARTUS_BIN/quartus_map" --read_settings_files=on --write_settings_files=off "\$top_name" -c "\$top_name"
+    fi
+    echo "[quartus] Abrindo Quartus GUI (acesse Tools -> Netlist Viewers -> RTL Viewer)..."
+    nohup "\$QUARTUS_BIN/quartus" "\$top_name.qpf" >/dev/null 2>&1 &
+  fi
+}
+
 case "\${1:-gui}" in
   compile) shift; cmd_compile "\$@" ;;
+  rtl)     shift; cmd_rtl "\$@" ;;
   fpga)    shift; cmd_fpga "\$@" ;;
   jtag)    ensure_quartus; shift; "\$QUARTUS_BIN/jtagconfig" "\$@" ;;
   gui)     ensure_quartus; shift; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;

@@ -44,6 +44,12 @@ quartus jtag
 
 # Abrir interface gráfica
 quartus gui
+
+# Atualizar o utilitário quartus pelo GitHub
+quartus update
+
+# Desinstalar Quartus II 13.0 SP1, comando e atalho .desktop
+quartus uninstall
 ```
 
 Para alterar o dispositivo padrão:

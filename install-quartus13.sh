@@ -203,6 +203,8 @@ Comandos:
   fpga [arquivo.sof]                 Grava o bitstream (.sof) na FPGA via USB-Blaster
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
+  update                             Atualiza o utilitário 'quartus' a partir do GitHub
+  uninstall [-y|--yes]               Remove o Quartus II 13.0 SP1, o comando e o atalho .desktop
   sh [args...]                       Repassa diretamente para quartus_sh
   pgm [args...]                      Repassa diretamente para quartus_pgm
   help                               Mostra esta ajuda
@@ -377,16 +379,72 @@ cmd_rtl() {
   fi
 }
 
+cmd_update() {
+  local url="\${QUARTUS_UPDATE_URL:-https://raw.githubusercontent.com/gbtaffarel/quartus-installer/main/install-quartus13.sh}"
+  local tmp_script
+  tmp_script="\$(mktemp)"
+  trap 'rm -f "\$tmp_script"' RETURN
+
+  echo "[quartus] Baixando atualização de \$url..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "\$url" -o "\$tmp_script"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "\$tmp_script" "\$url"
+  else
+    echo "Erro: nem 'curl' nem 'wget' encontrados." >&2
+    exit 1
+  fi
+
+  chmod +x "\$tmp_script"
+  QUARTUS_INSTALL_DIR="$INSTALL_DIR" QUARTUS_BIN_DIR="$BIN_DIR" bash "\$tmp_script" "\$@"
+}
+
+cmd_uninstall() {
+  local auto_yes=false
+  if [[ "\${1:-}" == "-y" || "\${1:-}" == "--yes" ]]; then
+    auto_yes=true
+  fi
+
+  local desktop_file="\${HOME}/.local/share/applications/quartus-13.0sp1.desktop"
+  local self_bin="$BIN_DIR/quartus"
+
+  echo "Isso removerá:"
+  echo "  - $INSTALL_DIR"
+  echo "  - \$self_bin"
+  echo "  - \$desktop_file"
+
+  if [[ "\$auto_yes" != true ]]; then
+    read -r -p "Tem certeza que deseja desinstalar? [s/N] " resp
+    case "\$resp" in
+      s|S|sim|SIM|y|Y|yes|YES) ;;
+      *) echo "Cancelado."; exit 0 ;;
+    esac
+  fi
+
+  rm -rf "$INSTALL_DIR"
+  rm -f "\$desktop_file"
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "\${HOME}/.local/share/applications" || true
+  rm -f "\$self_bin"
+
+  echo "[quartus] Desinstalação concluída."
+  if [[ -f /etc/udev/rules.d/51-usbblaster.rules ]]; then
+    echo "Nota: se desejar remover a regra udev do USB-Blaster, execute:"
+    echo "  sudo rm -f /etc/udev/rules.d/51-usbblaster.rules && sudo udevadm control --reload-rules"
+  fi
+}
+
 case "\${1:-gui}" in
-  compile) shift; cmd_compile "\$@" ;;
-  rtl)     shift; cmd_rtl "\$@" ;;
-  fpga)    shift; cmd_fpga "\$@" ;;
-  jtag)    ensure_quartus; shift; "\$QUARTUS_BIN/jtagconfig" "\$@" ;;
-  gui)     ensure_quartus; shift; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;
-  sh)      ensure_quartus; shift; "\$QUARTUS_BIN/quartus_sh" "\$@" ;;
-  pgm)     ensure_quartus; shift; "\$QUARTUS_BIN/quartus_pgm" "\$@" ;;
+  compile)   shift; cmd_compile "\$@" ;;
+  rtl)       shift; cmd_rtl "\$@" ;;
+  fpga)      shift; cmd_fpga "\$@" ;;
+  jtag)      ensure_quartus; shift; "\$QUARTUS_BIN/jtagconfig" "\$@" ;;
+  gui)       ensure_quartus; shift; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;
+  update)    shift; cmd_update "\$@" ;;
+  uninstall) shift; cmd_uninstall "\$@" ;;
+  sh)        ensure_quartus; shift; "\$QUARTUS_BIN/quartus_sh" "\$@" ;;
+  pgm)       ensure_quartus; shift; "\$QUARTUS_BIN/quartus_pgm" "\$@" ;;
   -h|--help|help) usage ;;
-  *)       ensure_quartus; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;
+  *)         ensure_quartus; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;
 esac
 EOF
   chmod +x "$target"

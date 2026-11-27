@@ -490,14 +490,14 @@ async function main() {
       border-radius: 6px;
       padding: 10px 12px;
     }
-    #iopanel, #iopanel > div {
+    #iopanel, #iopanel form, #iopanel [data-iopanel="input"], #iopanel [data-iopanel="output"] {
       display: flex;
       flex-wrap: wrap;
       gap: 8px 14px;
       align-items: center;
       width: 100%;
     }
-    #iopanel > div > div, #iopanel > div > label, #iopanel > label {
+    #iopanel [data-iopanel] > div {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -536,8 +536,8 @@ async function main() {
   </div>
   <div id="paper"></div>
   <div id="sevenseg-panel"></div>
-  <div id="iopanel"></div>
   <div id="monitor"></div>
+  <div id="iopanel"></div>
   <script>
     const CIRCUIT_JSON = ${JSON.stringify(circuitJson)};
     document.addEventListener('DOMContentLoaded', () => {

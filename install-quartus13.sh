@@ -204,6 +204,7 @@ Comandos:
   compile                            Compila o .qpf existente no diretório atual
   rtl [--digitaljs|--svg|--quartus] <toplevel.v> [arquivos...]
                                      Visualiza o esquemático RTL (padrão: auto)
+  install rtl                        Instala dependências RTL (yosys, netlistsvg e DigitalJS)
   fpga [arquivo.sof]                 Grava o bitstream (.sof) na FPGA via USB-Blaster
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
@@ -387,7 +388,7 @@ cmd_rtl() {
     digitaljs)
       if [[ ! -f "\$digitaljs_render" ]] || ! command -v node >/dev/null 2>&1 || ! command -v yosys >/dev/null 2>&1; then
         echo "Erro: DigitalJS (\$digitaljs_render), node ou yosys não encontrado." >&2
-        echo "Instale com: quartus update --with-rtl" >&2
+        echo "Instale com: quartus install rtl" >&2
         exit 1
       fi
       local html_out="build/\${top_name}_rtl.html"
@@ -399,7 +400,7 @@ cmd_rtl() {
     svg)
       if ! command -v yosys >/dev/null 2>&1 || [[ -z "\$netlistsvg_bin" ]]; then
         echo "Erro: yosys ou netlistsvg não encontrados." >&2
-        echo "Instale com: quartus update --with-rtl" >&2
+        echo "Instale com: quartus install rtl" >&2
         exit 1
       fi
       local json_out="build/\${top_name}_rtl.json"
@@ -478,9 +479,17 @@ cmd_uninstall() {
   fi
 }
 
+cmd_install() {
+  case "\${1:-}" in
+    rtl) cmd_update --with-rtl ;;
+    *)   echo "Uso: quartus install rtl" >&2; exit 1 ;;
+  esac
+}
+
 case "\${1:-gui}" in
   compile)   shift; cmd_compile "\$@" ;;
   rtl)       shift; cmd_rtl "\$@" ;;
+  install)   shift; cmd_install "\$@" ;;
   fpga)      shift; cmd_fpga "\$@" ;;
   jtag)      ensure_quartus; shift; "\$QUARTUS_BIN/jtagconfig" "\$@" ;;
   gui)       ensure_quartus; shift; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;

@@ -34,6 +34,8 @@ quartus compile
 
 # Visualizar o esquemático RTL (automático: DigitalJS -> Yosys+netlistsvg -> Quartus)
 quartus rtl booth_top.v
+# Instalar dependências de visualização RTL (yosys, netlistsvg e DigitalJS):
+quartus install rtl
 # Ou escolher explicitamente o visualizador:
 quartus rtl --digitaljs booth_top.v
 quartus rtl --svg booth_top.v

@@ -484,11 +484,53 @@ cmd_uninstall() {
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "\${HOME}/.local/share/applications" || true
   rm -f "\$self_bin"
 
-  echo "[quartus] Desinstalação concluída."
-  if [[ -f /etc/udev/rules.d/51-usbblaster.rules ]]; then
-    echo "Nota: se desejar remover a regra udev do USB-Blaster, execute:"
-    echo "  sudo rm -f /etc/udev/rules.d/51-usbblaster.rules && sudo udevadm control --reload-rules"
+  local djs_dir="\${HOME}/.local/share/digitaljs"
+  if [[ -d "\$djs_dir" ]]; then
+    if [[ "\$auto_yes" == true ]]; then
+      rm -rf "\$djs_dir"
+    else
+      read -r -p "Deseja remover também o DigitalJS/netlistsvg local (\$djs_dir)? [s/N] " resp_djs
+      case "\$resp_djs" in
+        s|S|sim|SIM|y|Y|yes|YES) rm -rf "\$djs_dir" ;;
+      esac
+    fi
   fi
+
+  if [[ -f /etc/udev/rules.d/51-usbblaster.rules ]]; then
+    if [[ "\$auto_yes" == true ]]; then
+      sudo rm -f /etc/udev/rules.d/51-usbblaster.rules && sudo udevadm control --reload-rules || true
+    else
+      read -r -p "Deseja remover a regra udev do USB-Blaster (/etc/udev/rules.d/51-usbblaster.rules, usa sudo)? [s/N] " resp_udev
+      case "\$resp_udev" in
+        s|S|sim|SIM|y|Y|yes|YES)
+          sudo rm -f /etc/udev/rules.d/51-usbblaster.rules && sudo udevadm control --reload-rules || true
+          ;;
+      esac
+    fi
+  fi
+
+  if command -v yosys >/dev/null 2>&1 || command -v npm >/dev/null 2>&1; then
+    local remove_sys=false
+    if [[ "\$auto_yes" != true ]]; then
+      read -r -p "Deseja remover também os pacotes do sistema (yosys, nodejs, npm)? [s/N] " resp_sys
+      case "\$resp_sys" in
+        s|S|sim|SIM|y|Y|yes|YES) remove_sys=true ;;
+      esac
+    fi
+    if [[ "\$remove_sys" == true ]]; then
+      if command -v pacman >/dev/null 2>&1; then
+        sudo pacman -Rs yosys nodejs npm || true
+      elif command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get remove -y yosys nodejs npm || true
+      elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf remove -y yosys nodejs npm || true
+      elif command -v zypper >/dev/null 2>&1; then
+        sudo zypper remove -y yosys nodejs npm || true
+      fi
+    fi
+  fi
+
+  echo "[quartus] Desinstalação concluída."
 }
 
 cmd_install() {

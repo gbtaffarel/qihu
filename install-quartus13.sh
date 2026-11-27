@@ -485,16 +485,19 @@ async function main() {
     #paper { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px; overflow: auto; }
     #iopanel {
       margin-top: 12px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px 16px;
-      align-items: center;
       background: #fff;
       border: 1px solid #ddd;
       border-radius: 6px;
       padding: 10px 12px;
     }
-    #iopanel > div, #iopanel > label, #iopanel > span {
+    #iopanel, #iopanel > div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      width: 100%;
+    }
+    #iopanel > div > div, #iopanel > div > label, #iopanel > label {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -592,7 +595,8 @@ async function main() {
 
       function updateSevenSeg() {
         segViews.forEach(({ cell, card }) => {
-          const sig = cell.get('outputSignals') && cell.get('outputSignals').in;
+          const sig = (cell.get('inputSignals') && cell.get('inputSignals').in)
+                   || (cell.get('outputSignals') && cell.get('outputSignals').in);
           if (!sig) return;
           const bits = sig.toBin ? sig.toBin().split('').reverse() : [];
           for (let i = 0; i < 7; i++) {

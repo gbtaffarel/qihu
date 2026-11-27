@@ -486,7 +486,7 @@ cmd_install() {
   esac
 }
 
-case "\${1:-gui}" in
+case "\${1:-help}" in
   compile)   shift; cmd_compile "\$@" ;;
   rtl)       shift; cmd_rtl "\$@" ;;
   install)   shift; cmd_install "\$@" ;;

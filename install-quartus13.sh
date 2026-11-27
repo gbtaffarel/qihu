@@ -696,6 +696,8 @@ HELP
   fi
 
   local desktop_file="\${HOME}/.local/share/applications/quartus-13.0sp1.desktop"
+  local bash_comp="\${HOME}/.local/share/bash-completion/completions/quartus"
+  local zsh_comp="\${HOME}/.local/share/zsh/site-functions/_quartus"
   local self_bin="$BIN_DIR/quartus"
 
   echo "Isso removerá:"
@@ -712,7 +714,7 @@ HELP
   fi
 
   rm -rf "$INSTALL_DIR"
-  rm -f "\$desktop_file"
+  rm -f "\$desktop_file" "\$bash_comp" "\$zsh_comp"
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "\${HOME}/.local/share/applications" || true
   rm -f "\$self_bin"
 
@@ -1175,6 +1177,130 @@ EOF
 # ------------------------------------------------------------------------------
 # 4. Desktop entry + PATH + optional udev rules
 # ------------------------------------------------------------------------------
+install_completions() {
+  local bash_comp_dir="${HOME}/.local/share/bash-completion/completions"
+  local zsh_comp_dir="${HOME}/.local/share/zsh/site-functions"
+  mkdir -p "$bash_comp_dir" "$zsh_comp_dir"
+
+  cat > "$bash_comp_dir/quartus" <<'BASHCOMP'
+_quartus_completions() {
+  local cur prev subcmd
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  subcmd="${COMP_WORDS[1]:-}"
+
+  local cmds="compile rtl sim fpga report stats pins watch doctor install clean jtag gui update uninstall sh pgm help"
+
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
+    return 0
+  fi
+
+  case "$subcmd" in
+    compile)
+      if [[ "$prev" == "--board" ]]; then
+        COMPREPLY=( $(compgen -W "de0" -- "$cur") )
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "--board -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -f -X '!*.@(v|sv|vhd|vhdl|qpf)' -- "$cur") )
+      fi
+      ;;
+    rtl)
+      if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "--digitaljs --svg --yosys --quartus --viewer --auto -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -f -X '!*.@(v|sv)' -- "$cur") )
+      fi
+      ;;
+    sim)
+      if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "-w --wave --modelsim -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -f -X '!*.@(v|sv)' -- "$cur") )
+      fi
+      ;;
+    fpga)
+      if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "-r --recompile -p --permanent -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -f -X '!*.@(sof|pof)' -- "$cur") )
+      fi
+      ;;
+    pins)
+      if [[ "$prev" == "--apply" ]]; then
+        COMPREPLY=( $(compgen -f -X '!*.qsf' -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--apply -h --help" -- "$cur") )
+      fi
+      ;;
+    install)
+      COMPREPLY=( $(compgen -W "rtl -h --help" -- "$cur") )
+      ;;
+    watch)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "compile rtl sim fpga report" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -f -- "$cur") )
+      fi
+      ;;
+    uninstall)
+      COMPREPLY=( $(compgen -W "-y --yes -h --help" -- "$cur") )
+      ;;
+    *)
+      COMPREPLY=( $(compgen -f -- "$cur") )
+      ;;
+  esac
+}
+complete -F _quartus_completions quartus
+BASHCOMP
+
+  cat > "$zsh_comp_dir/_quartus" <<'ZSHCOMP'
+#compdef quartus
+
+_quartus() {
+  local -a cmds
+  cmds=(
+    'compile:Compila o projeto (.qpf ou arquivos Verilog/VHDL)'
+    'rtl:Visualiza o esquemático RTL'
+    'sim:Simula testbench com iverilog/GTKWave ou ModelSim'
+    'fpga:Grava bitstream (.sof/.pof) na FPGA via USB-Blaster'
+    'report:Resumo de recursos e timing da compilação'
+    'stats:Alias para report'
+    'pins:Lista ou aplica pinagem da placa DE0'
+    'watch:Reexecuta comando ao salvar arquivos HDL'
+    'doctor:Verifica saúde do ambiente Quartus/ModelSim/RTL'
+    'install:Instala componentes extras (rtl)'
+    'clean:Remove arquivos gerados pela compilação'
+    'jtag:Verifica dispositivos JTAG conectados'
+    'gui:Abre a interface gráfica do Quartus II 13.0 SP1'
+    'update:Atualiza o utilitário quartus pelo GitHub'
+    'uninstall:Remove o Quartus II 13.0 SP1 e o utilitário'
+    'help:Mostra ajuda'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe 'comando' cmds
+    return
+  fi
+
+  case "$words[2]" in
+    compile)   _arguments '--board[Placa alvo]:board:(de0)' '(-h --help)'{-h,--help}'[Ajuda]' '*:arquivo:_files -g "*.(v|sv|vhd|vhdl|qpf)"' ;;
+    rtl)       _arguments '--digitaljs[HTML interativo]' '--svg[SVG via Yosys]' '--quartus[Quartus GUI]' '--auto[Automático]' '(-h --help)'{-h,--help}'[Ajuda]' '*:arquivo:_files -g "*.(v|sv)"' ;;
+    sim)       _arguments '(-w --wave)'{-w,--wave}'[Abrir GTKWave]' '--modelsim[Usar ModelSim]' '(-h --help)'{-h,--help}'[Ajuda]' '*:arquivo:_files -g "*.(v|sv)"' ;;
+    fpga)      _arguments '(-r --recompile)'{-r,--recompile}'[Recompilar antes]' '(-p --permanent)'{-p,--permanent}'[Gravar .pof na flash]' '(-h --help)'{-h,--help}'[Ajuda]' '*:bitstream:_files -g "*.(sof|pof)"' ;;
+    pins)      _arguments '--apply[Aplicar em .qsf]:qsf:_files -g "*.qsf"' '(-h --help)'{-h,--help}'[Ajuda]' ;;
+    install)   _values 'componente' 'rtl' ;;
+    watch)     (( CURRENT == 3 )) && _values 'comando' compile rtl sim fpga report || _files ;;
+    uninstall) _arguments '(-y --yes)'{-y,--yes}'[Sem confirmação]' '(-h --help)'{-h,--help}'[Ajuda]' ;;
+    *)         _files ;;
+  esac
+}
+
+_quartus "$@"
+ZSHCOMP
+}
+
 install_desktop_entry() {
   local apps_dir="${HOME}/.local/share/applications"
   mkdir -p "$apps_dir"
@@ -1358,6 +1484,7 @@ main() {
   install_quartus
   install_rtl_deps
   install_cli_wrapper
+  install_completions
   install_desktop_entry
   setup_udev_rules
   check_path

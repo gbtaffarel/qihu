@@ -87,3 +87,7 @@ Para alterar o dispositivo padrão:
 export QUARTUS_FAMILY="Cyclone II"
 export QUARTUS_DEVICE="EP2C35F672C6"
 ```
+
+## Licença
+
+O instalador e o utilitário CLI são distribuídos sob a licença [MIT](LICENSE). Os binários do **Quartus II Web Edition** e **ModelSim-Altera** pertencem à Altera/Intel e seguem seus respectivos termos de uso.

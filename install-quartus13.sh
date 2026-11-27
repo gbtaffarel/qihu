@@ -625,7 +625,13 @@ HELP
       else
         "\$QUARTUS_BIN/quartus_map" --read_settings_files=on --write_settings_files=off "\$top_name" -c "\$top_name"
       fi
-      echo "[quartus] Abrindo Quartus GUI (acesse Tools -> Netlist Viewers -> RTL Viewer)..."
+      echo "[quartus] Abrindo Quartus GUI..."
+      printf "\n\033[1;33m========================================================================\033[0m\n"
+      printf "\033[1;33m[ATENÇÃO]\033[0m O Quartus 13.0 SP1 não abre o RTL Viewer direto pela CLI.\n"
+      printf "          Na janela do Quartus que vai abrir, acesse no menu:\n"
+      printf "          \033[1;36mTools -> Netlist Viewers -> RTL Viewer\033[0m\n"
+      printf "          (Dica: use 'quartus rtl %s' ou '--svg' para abrir direto.)\n" "\$top_arg"
+      printf "\033[1;33m========================================================================\033[0m\n\n"
       launch_bg "\$QUARTUS_BIN/quartus" "\$top_name.qpf"
       ;;
   esac

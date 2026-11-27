@@ -1,6 +1,6 @@
-# Quartus II 13.0 SP1 Installer & CLI
+# Quartus I Hate You
 
-Script agnóstico de distro para instalar o **Altera Quartus II 13.0 SP1 Web Edition** localmente no Linux e disponibilizar o comando `quartus` no `PATH`.
+Script para instalar o **Altera Quartus II 13.0 SP1 Web Edition** localmente no Linux e disponibilizar o comando `qihu` no `PATH`.
 
 ## Instalação rápida
 
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/gbtaffarel/quartus-installer/main/i
 
 ## Uso do comando `quartus` (ou `qihu`)
 
-> Dica: o comando também fica disponível pelo alias **`qihu`** (*Quartus I Hate You* — ex.: `qihu compile`, `qihu fpga`, `qihu rtl ...`).
+> Dica: o comando também fica disponível pelo alias **`quartus`** (ex.: `quartus compile`, `quartus fpga`, `quartus rtl ...`).
 
 ```bash
 # Compilar criando um projeto automaticamente (Cyclone III EP3C16F484C6 por padrão)

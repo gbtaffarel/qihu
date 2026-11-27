@@ -48,6 +48,9 @@ quartus fpga --recompile
 # ou especificando o arquivo:
 quartus fpga output_files/multiplicador.sof
 
+# Limpar arquivos gerados pela compilação (mantém .v/.vhd/.qpf/.qsf)
+quartus clean
+
 # Verificar conexão JTAG
 quartus jtag
 

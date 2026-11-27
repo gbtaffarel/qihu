@@ -206,6 +206,7 @@ Comandos:
                                      Visualiza o esquemático RTL (padrão: auto)
   install rtl                        Instala dependências RTL (yosys, netlistsvg e DigitalJS)
   fpga [--recompile] [arquivo.sof]   Grava o bitstream (.sof) na FPGA via USB-Blaster
+  clean                              Remove arquivos gerados pela compilação e pelo RTL
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
   update                             Atualiza o utilitário 'quartus' a partir do GitHub
@@ -651,6 +652,34 @@ HELP
   esac
 }
 
+cmd_clean() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus clean
+
+Descrição:
+  Remove os diretórios e arquivos gerados pela compilação do Quartus e pelo
+  'quartus rtl' no diretório atual (db/, incremental_db/, output_files/,
+  simulation/, greybox_tmp/, build/, *_assignment_defaults.qdf, *.rpt, *.sof, etc.).
+  Os arquivos de código (.v/.sv/.vhd) e do projeto (.qpf/.qsf) são preservados.
+HELP
+    return 0
+  fi
+
+  echo "[quartus] Limpando arquivos de compilação no diretório atual..."
+  rm -rf db incremental_db output_files simulation greybox_tmp build
+  shopt -s nullglob
+  local artifacts=(
+    *_assignment_defaults.qdf
+    *.rpt *.summary *.done *.pin *.jdi *.smsg *.sld *.qws *.bak *.sof *.pof
+  )
+  if [[ \${#artifacts[@]} -gt 0 ]]; then
+    rm -f "\${artifacts[@]}"
+  fi
+  shopt -u nullglob
+  echo "[quartus] Limpeza concluída."
+}
+
 cmd_jtag() {
   if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
     cat <<'HELP'
@@ -684,6 +713,7 @@ case "\${1:-help}" in
   rtl)       shift; cmd_rtl "\$@" ;;
   install)   shift; cmd_install "\$@" ;;
   fpga)      shift; cmd_fpga "\$@" ;;
+  clean)     shift; cmd_clean "\$@" ;;
   jtag)      shift; cmd_jtag "\$@" ;;
   gui)       shift; cmd_gui "\$@" ;;
   update)    shift; cmd_update "\$@" ;;

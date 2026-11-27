@@ -205,7 +205,7 @@ Comandos:
   rtl [--digitaljs|--svg|--quartus] <toplevel.v> [arquivos...]
                                      Visualiza o esquemático RTL (padrão: auto)
   install rtl                        Instala dependências RTL (yosys, netlistsvg e DigitalJS)
-  fpga [arquivo.sof]                 Grava o bitstream (.sof) na FPGA via USB-Blaster
+  fpga [--recompile] [arquivo.sof]   Grava o bitstream (.sof) na FPGA via USB-Blaster
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
   update                             Atualiza o utilitário 'quartus' a partir do GitHub
@@ -290,6 +290,18 @@ QSF
 
 cmd_fpga() {
   ensure_quartus
+  local recompile=false
+  while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+      --recompile|-r) recompile=true; shift ;;
+      *) break ;;
+    esac
+  done
+
+  if [[ "\$recompile" == true ]]; then
+    cmd_compile
+  fi
+
   local sof="\${1:-}"
 
   if [[ -z "\$sof" ]]; then

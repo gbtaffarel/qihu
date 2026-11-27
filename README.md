@@ -43,6 +43,8 @@ quartus rtl --quartus booth_top.v
 
 # Enviar o .sof gerado para a FPGA via USB-Blaster
 quartus fpga
+# Recompilar o projeto atual e enviar para a FPGA:
+quartus fpga --recompile
 # ou especificando o arquivo:
 quartus fpga output_files/multiplicador.sof
 

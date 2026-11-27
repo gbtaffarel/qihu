@@ -333,8 +333,10 @@ HELP
     return
   fi
 
-  local toplevel="\$1"
+  local top_arg="\$1"
   shift
+  local toplevel="\$(basename "\$top_arg")"
+  toplevel="\${toplevel%.*}"
   local deps=("\$@")
   local proj="\$toplevel"
 
@@ -353,7 +355,9 @@ set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 QSF
 
     if [[ \${#deps[@]} -eq 0 ]]; then
-      if [[ -f "\$toplevel.v" ]]; then
+      if [[ -f "\$top_arg" ]]; then
+        deps=("\$top_arg")
+      elif [[ -f "\$toplevel.v" ]]; then
         deps=("\$toplevel.v")
       elif [[ -f "\$toplevel.sv" ]]; then
         deps=("\$toplevel.sv")
@@ -372,6 +376,12 @@ QSF
     done
 
     if [[ "\$board" == "de0" ]]; then
+      de0_pin_assignments >> "\$proj.qsf"
+    fi
+  elif [[ "\$board" == "de0" ]]; then
+    sed -i -E 's|^set_global_assignment -name FAMILY .*|set_global_assignment -name FAMILY "Cyclone III"|; s|^set_global_assignment -name DEVICE .*|set_global_assignment -name DEVICE EP3C16F484C6|' "\$proj.qsf"
+    if ! grep -q "Terasic DE0" "\$proj.qsf" 2>/dev/null; then
+      echo "" >> "\$proj.qsf"
       de0_pin_assignments >> "\$proj.qsf"
     fi
   fi
@@ -962,6 +972,7 @@ HELP
       echo "[quartus] Pinagem da DE0 já aplicada em \$qsf."
       return 0
     fi
+    echo "" >> "\$qsf"
     de0_pin_assignments >> "\$qsf"
     echo "[quartus] Pinagem da Terasic DE0 adicionada em \$qsf."
     return 0

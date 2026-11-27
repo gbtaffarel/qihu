@@ -497,10 +497,11 @@ HELP
   local bash_comp="${HOME}/.local/share/bash-completion/completions/quartus"
   local zsh_comp="${HOME}/.local/share/zsh/site-functions/_quartus"
   local self_bin="$QUARTUS_BIN_DIR/quartus"
+  local alias_bin="$QUARTUS_BIN_DIR/qihu"
 
   echo "Isso removerá:"
   echo "  - $QUARTUS_INSTALL_DIR"
-  echo "  - $self_bin"
+  echo "  - $self_bin (e $alias_bin)"
   echo "  - $desktop_file"
 
   if [[ "$auto_yes" != true ]]; then
@@ -514,7 +515,7 @@ HELP
   rm -rf "$QUARTUS_INSTALL_DIR"
   rm -f "$desktop_file" "$bash_comp" "$zsh_comp"
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "${HOME}/.local/share/applications" || true
-  rm -f "$self_bin"
+  rm -f "$self_bin" "$alias_bin"
 
   local djs_dir="${HOME}/.local/share/digitaljs"
   if [[ -d "$djs_dir" ]]; then

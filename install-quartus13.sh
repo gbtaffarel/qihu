@@ -224,6 +224,7 @@ install_cli_wrapper() {
   sed -i "s|^QUARTUS_INSTALL_DIR=.*|QUARTUS_INSTALL_DIR=\"\${QUARTUS_INSTALL_DIR:-$INSTALL_DIR}\"|; s|^QUARTUS_BIN_DIR=.*|QUARTUS_BIN_DIR=\"\${QUARTUS_BIN_DIR:-$BIN_DIR}\"|" "$target.tmp"
   chmod +x "$target.tmp"
   mv -f "$target.tmp" "$target"
+  ln -sf quartus "$BIN_DIR/qihu"
 }
 
 # ------------------------------------------------------------------------------
@@ -304,11 +305,11 @@ _quartus_completions() {
       ;;
   esac
 }
-complete -F _quartus_completions quartus
+complete -F _quartus_completions quartus qihu
 BASHCOMP
 
   cat > "$zsh_comp_dir/_quartus" <<'ZSHCOMP'
-#compdef quartus
+#compdef quartus qihu
 
 _quartus() {
   local -a cmds

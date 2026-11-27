@@ -23,7 +23,9 @@ curl -fsSL https://raw.githubusercontent.com/gbtaffarel/quartus-installer/main/i
 - `--install-dir DIR` — diretório de instalação (padrão: `~/altera/13.0sp1`)
 - `--bin-dir DIR` — diretório do executável `quartus` (padrão: `~/.local/bin`)
 
-## Uso do comando `quartus`
+## Uso do comando `quartus` (ou `qihu`)
+
+> Dica: o comando também fica disponível pelo alias **`qihu`** (*Quartus I Hate You* — ex.: `qihu compile`, `qihu fpga`, `qihu rtl ...`).
 
 ```bash
 # Compilar criando um projeto automaticamente (Cyclone III EP3C16F484C6 por padrão)

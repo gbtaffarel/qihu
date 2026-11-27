@@ -45,8 +45,26 @@ quartus rtl --quartus booth_top.v
 quartus fpga
 # Recompilar o projeto atual e enviar para a FPGA:
 quartus fpga --recompile
+# Gravar na memória flash não-volátil (.pof via Active Serial):
+quartus fpga --permanent output_files/projeto.pof
 # ou especificando o arquivo:
 quartus fpga output_files/multiplicador.sof
+
+# Simular testbench com iverilog/GTKWave (ou --modelsim)
+quartus sim --wave tb_booth.v
+
+# Ver resumo de recursos e timing da última compilação
+quartus report
+
+# Consultar ou aplicar pinagem padrão da placa Terasic DE0
+quartus pins
+quartus pins --apply projeto.qsf
+
+# Recompilar ou atualizar RTL automaticamente ao salvar arquivos .v/.sv/.vhd
+quartus watch compile
+
+# Verificar saúde do ambiente (libs, ModelSim, udev, JTAG, RTL)
+quartus doctor
 
 # Limpar arquivos gerados pela compilação (mantém .v/.vhd/.qpf/.qsf)
 quartus clean

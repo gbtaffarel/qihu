@@ -218,12 +218,20 @@ usage() {
 Uso: quartus <comando> [argumentos]
 
 Comandos:
-  compile <toplevel> [arquivos...]   Compila o projeto (gera .qpf/.qsf se não existir)
+  compile [--board de0] <toplevel> [arquivos...]
+                                     Compila o projeto (gera .qpf/.qsf se não existir)
   compile                            Compila o .qpf existente no diretório atual
   rtl [--digitaljs|--svg|--quartus] <toplevel.v> [arquivos...]
                                      Visualiza o esquemático RTL (padrão: auto)
+  sim [--wave] [--modelsim] <tb.v> [arquivos...]
+                                     Simula testbench (iverilog/vvp/gtkwave ou ModelSim)
+  fpga [--recompile] [--permanent] [arquivo.sof|pof]
+                                     Grava o bitstream na FPGA (.sof JTAG ou .pof AS)
+  report                             Exibe resumo de recursos e timing da compilação
+  pins [--apply arquivo.qsf]         Lista pinagem da placa DE0 ou aplica em um .qsf
+  watch <comando> [args...]          Reexecuta um comando ao salvar arquivos .v/.sv/.vhd
+  doctor                             Verifica dependências, patches, udev e JTAG
   install rtl                        Instala dependências RTL (yosys, netlistsvg e DigitalJS)
-  fpga [--recompile] [arquivo.sof]   Grava o bitstream (.sof) na FPGA via USB-Blaster
   clean                              Remove arquivos gerados pela compilação e pelo RTL
   jtag                               Verifica dispositivos JTAG conectados (jtagconfig)
   gui [arquivo.qpf]                  Abre a interface gráfica do Quartus II 13.0 SP1
@@ -247,12 +255,46 @@ ensure_quartus() {
   fi
 }
 
+de0_pin_assignments() {
+  cat <<'DE0PINS'
+# Terasic DE0 (EP3C16F484C6) Pin Assignments
+set_location_assignment PIN_G21 -to CLOCK_50
+set_location_assignment PIN_H2 -to BUTTON[0]
+set_location_assignment PIN_G3 -to BUTTON[1]
+set_location_assignment PIN_F1 -to BUTTON[2]
+set_location_assignment PIN_J6 -to SW[0]
+set_location_assignment PIN_H5 -to SW[1]
+set_location_assignment PIN_H6 -to SW[2]
+set_location_assignment PIN_G4 -to SW[3]
+set_location_assignment PIN_G5 -to SW[4]
+set_location_assignment PIN_J7 -to SW[5]
+set_location_assignment PIN_H7 -to SW[6]
+set_location_assignment PIN_E3 -to SW[7]
+set_location_assignment PIN_E4 -to SW[8]
+set_location_assignment PIN_D2 -to SW[9]
+set_location_assignment PIN_J1 -to LEDG[0]
+set_location_assignment PIN_J2 -to LEDG[1]
+set_location_assignment PIN_J3 -to LEDG[2]
+set_location_assignment PIN_H1 -to LEDG[3]
+set_location_assignment PIN_F2 -to LEDG[4]
+set_location_assignment PIN_E1 -to LEDG[5]
+set_location_assignment PIN_C1 -to LEDG[6]
+set_location_assignment PIN_C2 -to LEDG[7]
+set_location_assignment PIN_B2 -to LEDG[8]
+set_location_assignment PIN_B1 -to LEDG[9]
+DE0PINS
+}
+
 cmd_compile() {
-  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
-    cat <<'HELP'
+  local board=""
+  while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+      -h|--help)
+        cat <<'HELP'
 Uso:
   quartus compile                            Compila o .qpf existente no diretório atual
-  quartus compile <toplevel> [arquivos...]   Cria .qpf/.qsf (se não existir) e compila
+  quartus compile [--board de0] <toplevel> [arquivos...]
+                                             Cria .qpf/.qsf (se não existir) e compila
 
 Descrição:
   Executa síntese, place & route e geração do bitstream (.sof) em output_files/.
@@ -260,12 +302,21 @@ Descrição:
   Com <toplevel>, cria um projeto novo usando QUARTUS_FAMILY (padrão: Cyclone III)
   e QUARTUS_DEVICE (padrão: EP3C16F484C6) caso ainda não exista.
 
+Opções:
+  --board de0   Inclui os pinos padrão da placa Terasic DE0 ao criar o .qsf
+  -h, --help    Mostra esta ajuda
+
 Exemplos:
   quartus compile
+  quartus compile --board de0 top top.v
   quartus compile booth_top booth_top.v booth_control.v booth_datapath.v
 HELP
-    return 0
-  fi
+        return 0
+        ;;
+      --board) board="\${2:-}"; shift 2 ;;
+      *) break ;;
+    esac
+  done
 
   ensure_quartus
   if [[ \$# -eq 0 ]]; then
@@ -319,6 +370,10 @@ QSF
         *)            echo "set_global_assignment -name SOURCE_FILE \$src" >> "\$proj.qsf" ;;
       esac
     done
+
+    if [[ "\$board" == "de0" ]]; then
+      de0_pin_assignments >> "\$proj.qsf"
+    fi
   fi
 
   echo "[quartus] Compilando \$proj..."
@@ -328,28 +383,32 @@ QSF
 
 cmd_fpga() {
   local recompile=false
+  local permanent=false
   while [[ \$# -gt 0 ]]; do
     case "\$1" in
       -h|--help)
         cat <<'HELP'
-Uso: quartus fpga [--recompile|-r] [arquivo.sof]
+Uso: quartus fpga [--recompile|-r] [--permanent|-p] [arquivo.sof|pof]
 
 Descrição:
-  Grava o bitstream (.sof) na FPGA conectada via USB-Blaster (JTAG).
-  Se nenhum arquivo .sof for informado, usa o mais recente em output_files/*.sof ou *.sof.
+  Grava o bitstream na FPGA conectada via USB-Blaster.
+  Por padrão usa modo JTAG (.sof, volátil). Com --permanent usa modo Active
+  Serial (.pof, memória flash não-volátil da placa).
 
 Opções:
   -r, --recompile   Recompila o projeto .qpf do diretório atual antes de gravar
+  -p, --permanent   Grava arquivo .pof em modo Active Serial (persiste após desligar)
   -h, --help        Mostra esta ajuda
 
 Exemplos:
   quartus fpga
   quartus fpga --recompile
-  quartus fpga output_files/multiplicador.sof
+  quartus fpga --permanent output_files/projeto.pof
 HELP
         return 0
         ;;
       --recompile|-r) recompile=true; shift ;;
+      --permanent|-p) permanent=true; shift ;;
       *) break ;;
     esac
   done
@@ -360,19 +419,30 @@ HELP
     cmd_compile
   fi
 
-  local sof="\${1:-}"
+  local ext="sof"
+  local mode="jtag"
+  if [[ "\$permanent" == true ]]; then
+    ext="pof"
+    mode="as"
+  fi
 
-  if [[ -z "\$sof" ]]; then
-    sof=\$(ls -t output_files/*.sof *.sof 2>/dev/null | head -n 1 || true)
-    if [[ -z "\$sof" ]]; then
-      echo "Erro: nenhum arquivo .sof encontrado em output_files/ ou no diretório atual." >&2
-      echo "Compile primeiro com 'quartus compile ...' ou informe o caminho: quartus fpga caminho.sof" >&2
+  local bitfile="\${1:-}"
+
+  if [[ -z "\$bitfile" ]]; then
+    bitfile=\$(ls -t output_files/*.\$ext *.\$ext 2>/dev/null | head -n 1 || true)
+    if [[ -z "\$bitfile" ]]; then
+      echo "Erro: nenhum arquivo .\$ext encontrado em output_files/ ou no diretório atual." >&2
+      if [[ "\$permanent" == true ]]; then
+        echo "Gere o .pof (ou informe o caminho: quartus fpga --permanent arquivo.pof)." >&2
+      else
+        echo "Compile primeiro com 'quartus compile ...' ou informe o caminho: quartus fpga caminho.sof" >&2
+      fi
       exit 1
     fi
   fi
 
-  if [[ ! -f "\$sof" ]]; then
-    echo "Erro: arquivo não encontrado: \$sof" >&2
+  if [[ ! -f "\$bitfile" ]]; then
+    echo "Erro: arquivo não encontrado: \$bitfile" >&2
     exit 1
   fi
 
@@ -382,8 +452,8 @@ HELP
     exit 1
   fi
 
-  echo "[quartus] Gravando \$sof na FPGA..."
-  "\$QUARTUS_BIN/quartus_pgm" -m jtag -o "p;\$sof"
+  echo "[quartus] Gravando \$bitfile na FPGA (modo: \$mode)..."
+  "\$QUARTUS_BIN/quartus_pgm" -m "\$mode" -o "p;\$bitfile"
 }
 
 cmd_rtl() {
@@ -723,6 +793,307 @@ HELP
   echo "[quartus] Limpeza concluída."
 }
 
+cmd_sim() {
+  local open_wave=false
+  local use_modelsim=false
+  while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+      -h|--help)
+        cat <<'HELP'
+Uso: quartus sim [--wave|-w] [--modelsim] <testbench.v> [arquivos...]
+
+Descrição:
+  Compila e executa um testbench Verilog. Por padrão usa Icarus Verilog
+  (iverilog + vvp). Se apenas o testbench for informado, inclui automaticamente
+  os demais arquivos .v da pasta (ignorando outros *tb*.v / *testbench*.v).
+
+Opções:
+  -w, --wave    Abre o arquivo .vcd gerado no GTKWave após a simulação
+  --modelsim    Usa o ModelSim-Altera (vlib/vlog/vsim) em vez do iverilog
+  -h, --help    Mostra esta ajuda
+
+Exemplos:
+  quartus sim tb_booth.v
+  quartus sim --wave tb_booth.v booth_top.v booth_control.v
+  quartus sim --modelsim tb_booth.v
+HELP
+        return 0
+        ;;
+      -w|--wave)  open_wave=true; shift ;;
+      --modelsim) use_modelsim=true; shift ;;
+      *) break ;;
+    esac
+  done
+
+  if [[ \$# -eq 0 ]]; then
+    echo "Uso: quartus sim [--wave] [--modelsim] <testbench.v> [arquivos...]" >&2
+    exit 1
+  fi
+
+  local tb_file="\$1"
+  shift
+  if [[ ! -f "\$tb_file" ]]; then
+    echo "Erro: testbench não encontrado: \$tb_file" >&2
+    exit 1
+  fi
+
+  local tb_mod="\$(basename "\$tb_file")"
+  tb_mod="\${tb_mod%.*}"
+
+  local srcs=("\$tb_file")
+  if [[ \$# -gt 0 ]]; then
+    srcs+=("\$@")
+  else
+    shopt -s nullglob
+    for f in *.v; do
+      [[ "\$f" == "\$tb_file" ]] && continue
+      case "\$f" in
+        *tb*.v|*testbench*.v) continue ;;
+        *) srcs+=("\$f") ;;
+      esac
+    done
+    shopt -u nullglob
+  fi
+
+  mkdir -p build
+  if [[ "\$use_modelsim" == true ]]; then
+    local msim_bin="\$(dirname "\$QUARTUS_ROOT")/modelsim_ase/bin"
+    if [[ ! -x "\$msim_bin/vsim" ]]; then
+      echo "Erro: ModelSim-Altera não encontrado em \$msim_bin" >&2
+      exit 1
+    fi
+    echo "[quartus] Simulando '\$tb_mod' com ModelSim-Altera..."
+    "\$msim_bin/vlib" build/work >/dev/null 2>&1 || true
+    "\$msim_bin/vlog" -work build/work "\${srcs[@]}"
+    "\$msim_bin/vsim" -c -lib build/work "\$tb_mod" -do "run -all; quit -f"
+  else
+    if ! command -v iverilog >/dev/null 2>&1 || ! command -v vvp >/dev/null 2>&1; then
+      echo "Erro: 'iverilog' e 'vvp' são necessários para simulação padrão." >&2
+      exit 1
+    fi
+    echo "[quartus] Compilando e simulando '\$tb_mod' com iverilog..."
+    iverilog -Wall -o build/sim.vvp "\${srcs[@]}"
+    vvp build/sim.vvp
+  fi
+
+  if [[ "\$open_wave" == true ]]; then
+    local vcd_file
+    vcd_file=\$(ls -t *.vcd build/*.vcd 2>/dev/null | head -n 1 || true)
+    if [[ -z "\$vcd_file" ]]; then
+      echo "Aviso: nenhum arquivo .vcd encontrado. Verifique \$dumpfile no testbench." >&2
+      return 0
+    fi
+    if ! command -v gtkwave >/dev/null 2>&1; then
+      echo "Erro: 'gtkwave' não encontrado no PATH." >&2
+      exit 1
+    fi
+    echo "[quartus] Abrindo \$vcd_file no GTKWave..."
+    nohup gtkwave "\$vcd_file" >/dev/null 2>&1 &
+  fi
+}
+
+cmd_report() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus report [projeto]
+
+Descrição:
+  Exibe um resumo limpo no terminal com uso de lógica (LEs, registradores,
+  pinos, memória), slack de timing (Setup/Hold) e contagem de erros/avisos
+  a partir dos relatórios em output_files/.
+HELP
+    return 0
+  fi
+
+  local proj="\${1:-}"
+  local fit_sum=""
+  local map_sum=""
+  local sta_sum=""
+
+  if [[ -n "\$proj" ]]; then
+    fit_sum="output_files/\${proj}.fit.summary"
+    map_sum="output_files/\${proj}.map.summary"
+    sta_sum="output_files/\${proj}.sta.summary"
+  else
+    fit_sum=\$(ls -t output_files/*.fit.summary 2>/dev/null | head -n 1 || true)
+    map_sum=\$(ls -t output_files/*.map.summary 2>/dev/null | head -n 1 || true)
+    sta_sum=\$(ls -t output_files/*.sta.summary 2>/dev/null | head -n 1 || true)
+  fi
+
+  local summary="\${fit_sum}"
+  [[ ! -f "\$summary" ]] && summary="\${map_sum}"
+
+  if [[ -z "\$summary" || ! -f "\$summary" ]]; then
+    echo "Erro: nenhum relatório de compilação encontrado em output_files/." >&2
+    echo "Compile primeiro com 'quartus compile'." >&2
+    exit 1
+  fi
+
+  echo "=== Resumo de Recursos ==="
+  cat "\$summary"
+
+  if [[ -f "\$sta_sum" ]]; then
+    echo ""
+    echo "=== Timing (TimeQuest - Piores Slacks) ==="
+    grep -E "^(Type|Slack|TNS)" "\$sta_sum" | head -n 12 || true
+  fi
+}
+
+cmd_pins() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso:
+  quartus pins                  Lista a pinagem da placa Terasic DE0 (EP3C16F484C6)
+  quartus pins --apply [qsf]    Adiciona os pinos padrão da DE0 em um arquivo .qsf
+HELP
+    return 0
+  fi
+
+  if [[ "\${1:-}" == "--apply" ]]; then
+    local qsf="\${2:-}"
+    if [[ -z "\$qsf" ]]; then
+      qsf=\$(ls -1 *.qsf 2>/dev/null | head -n 1 || true)
+    fi
+    if [[ -z "\$qsf" || ! -f "\$qsf" ]]; then
+      echo "Erro: informe ou crie um arquivo .qsf no diretório atual." >&2
+      exit 1
+    fi
+    if grep -q "Terasic DE0" "\$qsf" 2>/dev/null; then
+      echo "[quartus] Pinagem da DE0 já aplicada em \$qsf."
+      return 0
+    fi
+    de0_pin_assignments >> "\$qsf"
+    echo "[quartus] Pinagem da Terasic DE0 adicionada em \$qsf."
+    return 0
+  fi
+
+  de0_pin_assignments
+}
+
+cmd_watch() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" || \$# -eq 0 ]]; then
+    cat <<'HELP'
+Uso: quartus watch <comando> [args...]
+
+Descrição:
+  Observa alterações em arquivos .v, .sv e .vhd no diretório atual e
+  reexecuta automaticamente o comando informado ao salvar.
+
+Exemplos:
+  quartus watch compile
+  quartus watch rtl booth_top.v
+  quartus watch sim tb_booth.v
+HELP
+    [[ \$# -eq 0 ]] && exit 1
+    return 0
+  fi
+
+  local subcmd=("\$@")
+  echo "[quartus] Observando arquivos HDL em \$PWD (Ctrl+C para sair)..."
+  echo "[quartus] Comando: quartus \${subcmd[*]}"
+
+  if command -v inotifywait >/dev/null 2>&1; then
+    while true; do
+      inotifywait -q -e close_write,moved_to,create --include '\.(v|sv|vhd|vhdl)$' . >/dev/null 2>&1 || true
+      echo ""
+      echo "[quartus] Alteração detectada (\$(date +%H:%M:%S)). Executando..."
+      "\$0" "\${subcmd[@]}" || true
+    done
+  else
+    local last_state=""
+    local curr_state=""
+    last_state=\$(stat -c '%n:%Y' *.v *.sv *.vhd *.vhdl 2>/dev/null | sort | tr '\n' ' ')
+    while true; do
+      sleep 1
+      curr_state=\$(stat -c '%n:%Y' *.v *.sv *.vhd *.vhdl 2>/dev/null | sort | tr '\n' ' ')
+      if [[ "\$curr_state" != "\$last_state" ]]; then
+        last_state="\$curr_state"
+        echo ""
+        echo "[quartus] Alteração detectada (\$(date +%H:%M:%S)). Executando..."
+        "\$0" "\${subcmd[@]}" || true
+      fi
+    done
+  fi
+}
+
+cmd_doctor() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus doctor
+
+Descrição:
+  Verifica a saúde da instalação: Quartus II 13.0 SP1, bibliotecas 32-bit,
+  ModelSim-Altera, patches do Linux, regra udev do USB-Blaster, JTAG e
+  ferramentas opcionais de RTL/simulação.
+HELP
+    return 0
+  fi
+
+  local ok="\033[1;32m[OK]\033[0m"
+  local warn_tag="\033[1;33m[AVISO]\033[0m"
+  local err_tag="\033[1;31m[ERRO]\033[0m"
+
+  echo "=== Diagnóstico Quartus II 13.0 SP1 ==="
+  if [[ -x "\$QUARTUS_BIN/quartus_sh" && -x "\$QUARTUS_BIN/quartus_pgm" ]]; then
+    printf "%b Quartus II 13.0 SP1 em %s\n" "\$ok" "\$QUARTUS_ROOT"
+  else
+    printf "%b Quartus II 13.0 SP1 não encontrado em %s\n" "\$err_tag" "\$QUARTUS_ROOT"
+  fi
+
+  if ldconfig -p 2>/dev/null | grep -q "libc.so.6.*32bit\|/lib32/\|/lib/i386-linux-gnu/\|/usr/lib32/" || [[ -e /lib/ld-linux.so.2 || -e /lib32/ld-linux.so.2 ]]; then
+    printf "%b Bibliotecas 32-bit detectadas\n" "\$ok"
+  else
+    printf "%b Bibliotecas 32-bit não detectadas\n" "\$err_tag"
+  fi
+
+  local msim_dir="\$(dirname "\$QUARTUS_ROOT")/modelsim_ase"
+  if [[ -x "\$msim_dir/bin/vsim" ]]; then
+    if grep -q 'vco="linux_rh60"' "\$msim_dir/vco" 2>/dev/null; then
+      printf "%b ModelSim-Altera instalado, mas vco ainda usa linux_rh60\n" "\$warn_tag"
+    else
+      printf "%b ModelSim-Altera pronto (%s)\n" "\$ok" "\$msim_dir"
+    fi
+  else
+    printf "%b ModelSim-Altera não instalado\n" "\$warn_tag"
+  fi
+
+  local qsim_tcl="\$QUARTUS_ROOT/common/tcl/apps/qsim/qsim_script_modified.tcl"
+  if [[ -f "\$qsim_tcl" ]] && ! grep -qE '^[^#]*win32aloem' "\$qsim_tcl"; then
+    printf "%b Patch Linux do simulador .vwf (qsim) aplicado\n" "\$ok"
+  else
+    printf "%b Patch Linux do qsim pendente\n" "\$warn_tag"
+  fi
+
+  if [[ -f /etc/udev/rules.d/51-usbblaster.rules ]]; then
+    printf "%b Regra udev USB-Blaster configurada\n" "\$ok"
+  else
+    printf "%b Regra udev USB-Blaster ausente (/etc/udev/rules.d/51-usbblaster.rules)\n" "\$warn_tag"
+  fi
+
+  if [[ -x "\$QUARTUS_BIN/jtagconfig" ]] && "\$QUARTUS_BIN/jtagconfig" 2>/dev/null | grep -q "Blaster"; then
+    printf "%b FPGA/USB-Blaster conectado via JTAG\n" "\$ok"
+  else
+    printf "%b Nenhum USB-Blaster conectado no momento\n" "\$warn_tag"
+  fi
+
+  local djs_render="\${DIGITALJS_RENDER:-\$HOME/.local/share/digitaljs/render.js}"
+  if command -v yosys >/dev/null 2>&1; then
+    printf "%b yosys instalado\n" "\$ok"
+  else
+    printf "%b yosys não instalado (use 'quartus install rtl')\n" "\$warn_tag"
+  fi
+  if [[ -f "\$djs_render" ]] && command -v node >/dev/null 2>&1; then
+    printf "%b DigitalJS pronto\n" "\$ok"
+  else
+    printf "%b DigitalJS não instalado (use 'quartus install rtl')\n" "\$warn_tag"
+  fi
+  if command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
+    printf "%b iverilog/vvp instalados\n" "\$ok"
+  else
+    printf "%b iverilog/vvp não instalados\n" "\$warn_tag"
+  fi
+}
+
 cmd_jtag() {
   if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
     cat <<'HELP'
@@ -754,6 +1125,11 @@ HELP
 case "\${1:-help}" in
   compile)   shift; cmd_compile "\$@" ;;
   rtl)       shift; cmd_rtl "\$@" ;;
+  sim)       shift; cmd_sim "\$@" ;;
+  report|stats) shift; cmd_report "\$@" ;;
+  pins)      shift; cmd_pins "\$@" ;;
+  watch)     shift; cmd_watch "\$@" ;;
+  doctor)    shift; cmd_doctor "\$@" ;;
   install)   shift; cmd_install "\$@" ;;
   fpga)      shift; cmd_fpga "\$@" ;;
   clean)     shift; cmd_clean "\$@" ;;

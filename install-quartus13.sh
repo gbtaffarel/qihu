@@ -531,8 +531,10 @@ async function main() {
   <div class="toolbar">
     <button name="start" type="button">▶ Start</button>
     <button name="stop" type="button">⏹ Stop</button>
+    <button name="step" type="button">⏭ Step</button>
+    <label>Velocidade: <input name="speed" type="range" min="10" max="500" step="10" value="10" style="vertical-align:middle;"> <span id="speed-val">10 ms</span></label>
     <label><input name="fixed" type="checkbox"> Fixed Mode</label>
-    <span class="shortcuts">Atalhos: <b>Espaço</b> Start/Stop · <b>F</b> Fixed · <b>1-9</b> Entradas · Duplo clique no módulo para abrir</span>
+    <span class="shortcuts">Atalhos: <b>Espaço</b> Start/Stop · <b>S</b> Step · <b>F</b> Fixed · <b>1-9</b> Entradas</span>
   </div>
   <div id="paper"></div>
   <div id="sevenseg-panel"></div>
@@ -543,6 +545,9 @@ async function main() {
     document.addEventListener('DOMContentLoaded', () => {
       const start = $('button[name=start]');
       const stop = $('button[name=stop]');
+      const step = $('button[name=step]');
+      const speed = $('input[name=speed]');
+      const speedVal = $('#speed-val');
       const papers = {};
       const fixed = (val) => Object.values(papers).forEach(p => p.fixed(val));
       const circuit = new digitaljs.Circuit(CIRCUIT_JSON);
@@ -551,7 +556,7 @@ async function main() {
       new digitaljs.IOPanelView({ model: circuit, el: $('#iopanel') });
       circuit.on('new:paper', (paper) => { paper.fixed($('input[name=fixed]').prop('checked')); papers[paper.cid] = paper; });
       circuit.on('remove:paper', (paper) => delete papers[paper.cid]);
-      circuit.on('changeRunning', () => { start.prop('disabled', circuit.running); stop.prop('disabled', !circuit.running); });
+      circuit.on('changeRunning', () => { start.prop('disabled', circuit.running); stop.prop('disabled', !circuit.running); step.prop('disabled', circuit.running); });
       circuit.displayOn($('#paper'));
       fixed($('input[name=fixed]').prop('checked'));
 
@@ -614,6 +619,20 @@ async function main() {
       updateSevenSeg();
       start.on('click', () => circuit.start());
       stop.on('click', () => circuit.stop());
+      step.on('click', () => {
+        if (!circuit.running) {
+          circuit.updateGates();
+          updateSevenSeg();
+        }
+      });
+      speed.on('input change', function () {
+        const ms = parseInt($(this).val(), 10) || 10;
+        speedVal.text(ms + ' ms');
+        const wasRunning = circuit.running;
+        if (wasRunning) circuit.stop();
+        circuit.interval = ms;
+        if (wasRunning) circuit.start();
+      });
       $('input[name=fixed]').change(function () { fixed($(this).prop('checked')); });
       document.addEventListener('keydown', (e) => {
         const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
@@ -625,6 +644,10 @@ async function main() {
           e.preventDefault();
           if (circuit.running) circuit.stop();
           else circuit.start();
+        } else if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          if (circuit.running) circuit.stop();
+          else { circuit.updateGates(); updateSevenSeg(); }
         } else if (e.key === 'f' || e.key === 'F') {
           e.preventDefault();
           const cb = $('input[name=fixed]');

@@ -187,6 +187,7 @@ install_quartus() {
   if [[ -f "$qsim_tcl" ]]; then
     chmod u+w "$qsim_tcl"
     sed -i 's|\.\.\\\\\.\.\\\\modelsim_ae\\\\win32aloem\\\\|../../modelsim_ae/bin/|g; s|\.\.\\\\\.\.\\\\modelsim_ase\\\\win32aloem\\\\|../../modelsim_ase/bin/|g' "$qsim_tcl"
+    sed -i -E 's|^([[:space:]]*)(file attributes .* -readonly [01])|\1catch { \2 }|' "$qsim_tcl"
   fi
 
   if [[ "$CLEAN_ISO" == true && -f "$ISO_PATH" ]]; then

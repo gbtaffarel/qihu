@@ -506,6 +506,21 @@ async function main() {
     }
     #monitor { margin-top: 12px; }
     .shortcuts { margin-left: auto; color: #666; font-size: 0.85em; }
+    #sevenseg-panel {
+      margin-top: 12px;
+      display: none;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      background: #1a1a1d;
+      color: #ddd;
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .sevenseg-card { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.8em; font-family: monospace; }
+    .sevenseg-seg { fill: #2d1b1b; transition: fill 0.05s; }
+    .sevenseg-seg.on { fill: #ff2e2e; filter: drop-shadow(0 0 3px #ff2e2ecc); }
+    #sevenseg-polarity { margin-left: auto; background: #2d2d32; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 10px; font-size: 0.85em; }
   </style>
   <script defer="defer" src="file://${distDir}/main.js"></script>
 </head>
@@ -517,6 +532,7 @@ async function main() {
     <span class="shortcuts">Atalhos: <b>Espaço</b> Start/Stop · <b>F</b> Fixed · <b>1-9</b> Entradas · Duplo clique no módulo para abrir</span>
   </div>
   <div id="paper"></div>
+  <div id="sevenseg-panel"></div>
   <div id="iopanel"></div>
   <div id="monitor"></div>
   <script>
@@ -535,7 +551,61 @@ async function main() {
       circuit.on('changeRunning', () => { start.prop('disabled', circuit.running); stop.prop('disabled', !circuit.running); });
       circuit.displayOn($('#paper'));
       fixed($('input[name=fixed]').prop('checked'));
+
+      let activeLow = true;
+      const outCells = circuit.getOutputCells().filter((c) => {
+        const lbl = c.get('label') || '';
+        return c.get('bits') === 7 && /^(hex|seg|disp|ssd)/i.test(lbl);
+      }).sort((a, b) => (b.get('label') || '').localeCompare(a.get('label') || '', undefined, { numeric: true }));
+
+      const segPanel = $('#sevenseg-panel');
+      const segViews = [];
+      if (outCells.length > 0) {
+        segPanel.css('display', 'flex');
+        outCells.forEach((cell) => {
+          const lbl = cell.get('label') || 'seg';
+          const card = $(\`
+            <div class="sevenseg-card">
+              <svg width="46" height="74" viewBox="0 0 46 74">
+                <polygon class="sevenseg-seg" data-seg="0" points="9,4 37,4 33,10 13,10"/>
+                <polygon class="sevenseg-seg" data-seg="1" points="39,6 42,10 40,34 36,36 33,32 35,12"/>
+                <polygon class="sevenseg-seg" data-seg="2" points="36,38 40,40 38,64 34,68 31,62 33,42"/>
+                <polygon class="sevenseg-seg" data-seg="3" points="10,64 32,64 35,70 7,70"/>
+                <polygon class="sevenseg-seg" data-seg="4" points="7,40 11,38 14,42 12,62 7,67 5,63"/>
+                <polygon class="sevenseg-seg" data-seg="5" points="9,10 13,6 16,12 14,32 10,36 7,34"/>
+                <polygon class="sevenseg-seg" data-seg="6" points="12,34 34,34 37,37 33,40 11,40 8,37"/>
+              </svg>
+              <span>\${lbl}</span>
+            </div>
+          \`);
+          segPanel.append(card);
+          segViews.push({ cell, card });
+        });
+        const polBtn = $('<button id="sevenseg-polarity" type="button">Active-Low (DE0)</button>');
+        polBtn.on('click', () => {
+          activeLow = !activeLow;
+          polBtn.text(activeLow ? 'Active-Low (DE0)' : 'Active-High');
+          updateSevenSeg();
+        });
+        segPanel.append(polBtn);
+      }
+
+      function updateSevenSeg() {
+        segViews.forEach(({ cell, card }) => {
+          const sig = cell.get('outputSignals') && cell.get('outputSignals').in;
+          if (!sig) return;
+          const bits = sig.toBin ? sig.toBin().split('').reverse() : [];
+          for (let i = 0; i < 7; i++) {
+            const b = bits[i];
+            const isOn = activeLow ? (b === '0') : (b === '1');
+            card.find(\`[data-seg="\${i}"]\`).toggleClass('on', isOn);
+          }
+        });
+      }
+
+      circuit.on('postUpdate', updateSevenSeg);
       circuit.start();
+      updateSevenSeg();
       start.on('click', () => circuit.start());
       stop.on('click', () => circuit.stop());
       $('input[name=fixed]').change(function () { fixed($(this).prop('checked')); });

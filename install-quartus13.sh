@@ -183,6 +183,12 @@ install_quartus() {
     sed -i 's/vco="linux_rh60"/vco="linux"/' "$INSTALL_DIR/modelsim_ase/vco"
   fi
 
+  local qsim_tcl="$INSTALL_DIR/quartus/common/tcl/apps/qsim/qsim_script_modified.tcl"
+  if [[ -f "$qsim_tcl" ]]; then
+    chmod u+w "$qsim_tcl"
+    sed -i 's|\.\.\\\\\.\.\\\\modelsim_ae\\\\win32aloem\\\\|../../modelsim_ae/bin/|g; s|\.\.\\\\\.\.\\\\modelsim_ase\\\\win32aloem\\\\|../../modelsim_ase/bin/|g' "$qsim_tcl"
+  fi
+
   if [[ "$CLEAN_ISO" == true && -f "$ISO_PATH" ]]; then
     log "Removendo ISO para liberar espaço: $ISO_PATH"
     rm -f "$ISO_PATH"

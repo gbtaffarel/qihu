@@ -229,6 +229,25 @@ ensure_quartus() {
 }
 
 cmd_compile() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso:
+  quartus compile                            Compila o .qpf existente no diretório atual
+  quartus compile <toplevel> [arquivos...]   Cria .qpf/.qsf (se não existir) e compila
+
+Descrição:
+  Executa síntese, place & route e geração do bitstream (.sof) em output_files/.
+  Sem argumentos, procura o arquivo .qpf no diretório atual.
+  Com <toplevel>, cria um projeto novo usando QUARTUS_FAMILY (padrão: Cyclone III)
+  e QUARTUS_DEVICE (padrão: EP3C16F484C6) caso ainda não exista.
+
+Exemplos:
+  quartus compile
+  quartus compile booth_top booth_top.v booth_control.v booth_datapath.v
+HELP
+    return 0
+  fi
+
   ensure_quartus
   if [[ \$# -eq 0 ]]; then
     local qpf
@@ -289,14 +308,34 @@ QSF
 }
 
 cmd_fpga() {
-  ensure_quartus
   local recompile=false
   while [[ \$# -gt 0 ]]; do
     case "\$1" in
+      -h|--help)
+        cat <<'HELP'
+Uso: quartus fpga [--recompile|-r] [arquivo.sof]
+
+Descrição:
+  Grava o bitstream (.sof) na FPGA conectada via USB-Blaster (JTAG).
+  Se nenhum arquivo .sof for informado, usa o mais recente em output_files/*.sof ou *.sof.
+
+Opções:
+  -r, --recompile   Recompila o projeto .qpf do diretório atual antes de gravar
+  -h, --help        Mostra esta ajuda
+
+Exemplos:
+  quartus fpga
+  quartus fpga --recompile
+  quartus fpga output_files/multiplicador.sof
+HELP
+        return 0
+        ;;
       --recompile|-r) recompile=true; shift ;;
       *) break ;;
     esac
   done
+
+  ensure_quartus
 
   if [[ "\$recompile" == true ]]; then
     cmd_compile
@@ -332,6 +371,29 @@ cmd_rtl() {
   local mode="auto"
   while [[ \$# -gt 0 ]]; do
     case "\$1" in
+      -h|--help)
+        cat <<'HELP'
+Uso: quartus rtl [--digitaljs|--svg|--quartus] <arquivo_toplevel.v> [dependencias...]
+
+Descrição:
+  Gera e abre a visualização do esquemático RTL (netlist) do circuito.
+  Se apenas o arquivo top-level for informado, coleta automaticamente os demais
+  arquivos .v/.sv do diretório (ignorando testbenches *tb*.v / *testbench*.v).
+
+Opções:
+  --digitaljs   Gera HTML interativo com DigitalJS e abre no navegador
+  --svg         Gera SVG estático com Yosys + netlistsvg
+  --quartus     Sintetiza com Quartus e abre a GUI para usar o RTL Viewer
+  --auto        Escolhe automaticamente (DigitalJS -> SVG -> Quartus) [padrão]
+  -h, --help    Mostra esta ajuda
+
+Exemplos:
+  quartus rtl booth_top.v
+  quartus rtl --svg booth_top.v
+  quartus rtl --digitaljs booth_top.v booth_control.v booth_datapath.v
+HELP
+        return 0
+        ;;
       --digitaljs) mode="digitaljs"; shift ;;
       --svg|--yosys) mode="svg"; shift ;;
       --quartus|--viewer) mode="quartus"; shift ;;
@@ -438,6 +500,22 @@ cmd_rtl() {
 }
 
 cmd_update() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus update [opções_do_instalador]
+
+Descrição:
+  Baixa a versão mais recente do script no GitHub e atualiza o comando 'quartus'
+  e o atalho .desktop sem baixar ou reinstalar o Quartus II 13.0 SP1 novamente.
+
+Opções:
+  --setup-udev   Configura a regra udev do USB-Blaster (usa sudo)
+  --all-devices  Instala suporte adicional (se ainda não instalado)
+  -h, --help     Mostra esta ajuda
+HELP
+    return 0
+  fi
+
   local url="\${QUARTUS_UPDATE_URL:-https://raw.githubusercontent.com/gbtaffarel/quartus-installer/main/install-quartus13.sh}"
   local tmp_script
   tmp_script="\$(mktemp)"
@@ -458,6 +536,22 @@ cmd_update() {
 }
 
 cmd_uninstall() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus uninstall [-y|--yes]
+
+Descrição:
+  Remove o Quartus II 13.0 SP1, o comando 'quartus' e o atalho .desktop.
+  Também pergunta se deseja remover dependências opcionais (DigitalJS/netlistsvg,
+  regra udev do USB-Blaster e pacotes de sistema yosys/nodejs/npm).
+
+Opções:
+  -y, --yes   Não pede confirmação para Quartus, DigitalJS e regra udev
+  -h, --help  Mostra esta ajuda
+HELP
+    return 0
+  fi
+
   local auto_yes=false
   if [[ "\${1:-}" == "-y" || "\${1:-}" == "--yes" ]]; then
     auto_yes=true
@@ -535,9 +629,54 @@ cmd_uninstall() {
 
 cmd_install() {
   case "\${1:-}" in
-    rtl) cmd_update --with-rtl ;;
-    *)   echo "Uso: quartus install rtl" >&2; exit 1 ;;
+    -h|--help)
+      cat <<'HELP'
+Uso: quartus install rtl
+
+Descrição:
+  Instala as dependências de visualização RTL: yosys, nodejs, npm (via
+  gerenciador de pacotes da distro com sudo) e digitaljs, yosys2digitaljs e
+  netlistsvg localmente em ~/.local/share/digitaljs/.
+HELP
+      return 0
+      ;;
+    rtl)
+      if [[ "\${2:-}" == "-h" || "\${2:-}" == "--help" ]]; then
+        cmd_install --help
+        return 0
+      fi
+      cmd_update --with-rtl
+      ;;
+    *) echo "Uso: quartus install rtl" >&2; exit 1 ;;
   esac
+}
+
+cmd_jtag() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus jtag [args...]
+
+Descrição:
+  Executa o 'jtagconfig' para listar os gravadores USB-Blaster e FPGAs detectadas.
+HELP
+    return 0
+  fi
+  ensure_quartus
+  "\$QUARTUS_BIN/jtagconfig" "\$@"
+}
+
+cmd_gui() {
+  if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
+    cat <<'HELP'
+Uso: quartus gui [arquivo.qpf]
+
+Descrição:
+  Abre a interface gráfica do Quartus II 13.0 SP1 Web Edition em segundo plano.
+HELP
+    return 0
+  fi
+  ensure_quartus
+  nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 &
 }
 
 case "\${1:-help}" in
@@ -545,8 +684,8 @@ case "\${1:-help}" in
   rtl)       shift; cmd_rtl "\$@" ;;
   install)   shift; cmd_install "\$@" ;;
   fpga)      shift; cmd_fpga "\$@" ;;
-  jtag)      ensure_quartus; shift; "\$QUARTUS_BIN/jtagconfig" "\$@" ;;
-  gui)       ensure_quartus; shift; nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 & ;;
+  jtag)      shift; cmd_jtag "\$@" ;;
+  gui)       shift; cmd_gui "\$@" ;;
   update)    shift; cmd_update "\$@" ;;
   uninstall) shift; cmd_uninstall "\$@" ;;
   sh)        ensure_quartus; shift; "\$QUARTUS_BIN/quartus_sh" "\$@" ;;

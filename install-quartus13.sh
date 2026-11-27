@@ -137,6 +137,7 @@ install_quartus() {
   local extract_targets=(
     "components/QuartusSetupWeb-13.0.1.232.run"
     "components/cyclone_web-13.0.1.232.qdz"
+    "components/ModelSimSetup-13.0.1.232.run"
   )
   if [[ "$ALL_DEVICES" == true ]]; then
     extract_targets+=(
@@ -170,7 +171,17 @@ install_quartus() {
   (
     cd "$work_dir/components"
     ./QuartusSetupWeb-13.0.1.232.run --mode unattended --unattendedmodeui none --installdir "$INSTALL_DIR"
+    if [[ -f ModelSimSetup-13.0.1.232.run ]]; then
+      chmod +x ModelSimSetup-13.0.1.232.run
+      log "Instalando ModelSim-Altera 13.0 SP1 (simulador de waveform)..."
+      ./ModelSimSetup-13.0.1.232.run --mode unattended --unattendedmodeui none --installdir "$INSTALL_DIR"
+    fi
   )
+
+  if [[ -f "$INSTALL_DIR/modelsim_ase/vco" ]]; then
+    chmod u+w "$INSTALL_DIR/modelsim_ase/vco"
+    sed -i 's/vco="linux_rh60"/vco="linux"/' "$INSTALL_DIR/modelsim_ase/vco"
+  fi
 
   if [[ "$CLEAN_ISO" == true && -f "$ISO_PATH" ]]; then
     log "Removendo ISO para liberar espaço: $ISO_PATH"

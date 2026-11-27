@@ -139,7 +139,8 @@ HELP
 
   local top_arg="$1"
   shift
-  local toplevel="$(basename "$top_arg")"
+  local toplevel
+  toplevel="$(basename "$top_arg")"
   toplevel="${toplevel%.*}"
   local deps=("$@")
   local proj="$toplevel"
@@ -312,7 +313,8 @@ HELP
 
   local top_arg="$1"
   shift
-  local top_name="$(basename "$top_arg")"
+  local top_name
+  top_name="$(basename "$top_arg")"
   top_name="${top_name%.*}"
 
   local srcs=()
@@ -351,7 +353,7 @@ HELP
       shopt -s nullglob
       for f in *.v *.sv; do
         case "$f" in
-          *tb*.v|*testbench*.v|*tb*.sv|*testbench*.sv) continue ;;
+          *tb*.v|*tb*.sv) continue ;;
           *) srcs+=("$f") ;;
         esac
       done
@@ -659,7 +661,8 @@ HELP
     exit 1
   fi
 
-  local tb_mod="$(basename "$tb_file")"
+  local tb_mod
+  tb_mod="$(basename "$tb_file")"
   tb_mod="${tb_mod%.*}"
 
   local srcs=("$tb_file")
@@ -670,7 +673,7 @@ HELP
     for f in *.v; do
       [[ "$f" == "$tb_file" ]] && continue
       case "$f" in
-        *tb*.v|*testbench*.v) continue ;;
+        *tb*.v) continue ;;
         *) srcs+=("$f") ;;
       esac
     done
@@ -679,7 +682,8 @@ HELP
 
   mkdir -p build
   if [[ "$use_modelsim" == true ]]; then
-    local msim_bin="$(dirname "$QUARTUS_ROOT")/modelsim_ase/bin"
+    local msim_bin
+    msim_bin="$(dirname "$QUARTUS_ROOT")/modelsim_ase/bin"
     if [[ ! -x "$msim_bin/vsim" ]]; then
       echo "Erro: ModelSim-Altera não encontrado em $msim_bin" >&2
       exit 1
@@ -702,7 +706,7 @@ HELP
     local vcd_file
     vcd_file=$(ls -t *.vcd build/*.vcd 2>/dev/null | head -n 1 || true)
     if [[ -z "$vcd_file" ]]; then
-      echo "Aviso: nenhum arquivo .vcd encontrado. Verifique $dumpfile no testbench." >&2
+      echo 'Aviso: nenhum arquivo .vcd encontrado. Verifique $dumpfile no testbench.' >&2
       return 0
     fi
     if ! command -v gtkwave >/dev/null 2>&1; then
@@ -869,7 +873,8 @@ HELP
     printf "%b Bibliotecas 32-bit não detectadas\n" "$err_tag"
   fi
 
-  local msim_dir="$(dirname "$QUARTUS_ROOT")/modelsim_ase"
+  local msim_dir
+  msim_dir="$(dirname "$QUARTUS_ROOT")/modelsim_ase"
   if [[ -x "$msim_dir/bin/vsim" ]]; then
     if grep -q 'vco="linux_rh60"' "$msim_dir/vco" 2>/dev/null; then
       printf "%b ModelSim-Altera instalado, mas vco ainda usa linux_rh60\n" "$warn_tag"

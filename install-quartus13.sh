@@ -483,7 +483,29 @@ async function main() {
     .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
     button { padding: 6px 12px; cursor: pointer; }
     #paper { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px; overflow: auto; }
-    #iopanel, #monitor { margin-top: 12px; }
+    #iopanel {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    #iopanel > div, #iopanel > label, #iopanel > span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      padding: 4px 8px;
+      background: #f5f5f5;
+      border: 1px solid #e2e2e2;
+      border-radius: 4px;
+    }
+    #monitor { margin-top: 12px; }
+    .shortcuts { margin-left: auto; color: #666; font-size: 0.85em; }
   </style>
   <script defer="defer" src="file://${distDir}/main.js"></script>
 </head>
@@ -492,6 +514,7 @@ async function main() {
     <button name="start" type="button">▶ Start</button>
     <button name="stop" type="button">⏹ Stop</button>
     <label><input name="fixed" type="checkbox"> Fixed Mode</label>
+    <span class="shortcuts">Atalhos: <b>Espaço</b> Start/Stop · <b>F</b> Fixed · <b>1-9</b> Entradas · Duplo clique no módulo para abrir</span>
   </div>
   <div id="paper"></div>
   <div id="iopanel"></div>
@@ -516,6 +539,31 @@ async function main() {
       start.on('click', () => circuit.start());
       stop.on('click', () => circuit.stop());
       $('input[name=fixed]').change(function () { fixed($(this).prop('checked')); });
+      document.addEventListener('keydown', (e) => {
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+          if (e.key === 'Escape') e.target.blur();
+          return;
+        }
+        if (e.code === 'Space') {
+          e.preventDefault();
+          if (circuit.running) circuit.stop();
+          else circuit.start();
+        } else if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          const cb = $('input[name=fixed]');
+          cb.prop('checked', !cb.prop('checked')).trigger('change');
+        } else if (e.key >= '1' && e.key <= '9') {
+          const idx = parseInt(e.key, 10) - 1;
+          const inputs = $('#iopanel input:not([disabled]), #iopanel button:not([disabled])');
+          const el = inputs.eq(idx);
+          if (el.length) {
+            e.preventDefault();
+            if (el.attr('type') === 'checkbox' || el.is('button')) el.trigger('click');
+            else el.focus().select();
+          }
+        }
+      });
     });
   </script>
 </body>

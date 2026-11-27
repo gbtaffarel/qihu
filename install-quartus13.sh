@@ -255,6 +255,14 @@ ensure_quartus() {
   fi
 }
 
+launch_bg() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid -f "\$@" </dev/null >/dev/null 2>&1
+  else
+    nohup "\$@" </dev/null >/dev/null 2>&1 &
+  fi
+}
+
 de0_pin_assignments() {
   cat <<'DE0PINS'
 # Terasic DE0 (EP3C16F484C6) Pin Assignments
@@ -593,7 +601,7 @@ HELP
       echo "[quartus] Gerando RTL interativo (DigitalJS) para '\$top_name'..."
       node "\$digitaljs_render" --top "\$top_name" -o "\$html_out" "\${srcs[@]}"
       echo "[quartus] Abrindo \$html_out..."
-      nohup xdg-open "\$html_out" >/dev/null 2>&1 &
+      launch_bg xdg-open "\$html_out"
       ;;
     svg)
       if ! command -v yosys >/dev/null 2>&1 || [[ -z "\$netlistsvg_bin" ]]; then
@@ -607,7 +615,7 @@ HELP
       yosys -q -p "read_verilog \${srcs[*]}; prep -top \$top_name; write_json \$json_out"
       "\$netlistsvg_bin" "\$json_out" -o "\$svg_out"
       echo "[quartus] Abrindo \$svg_out..."
-      nohup xdg-open "\$svg_out" >/dev/null 2>&1 &
+      launch_bg xdg-open "\$svg_out"
       ;;
     quartus)
       ensure_quartus
@@ -618,7 +626,7 @@ HELP
         "\$QUARTUS_BIN/quartus_map" --read_settings_files=on --write_settings_files=off "\$top_name" -c "\$top_name"
       fi
       echo "[quartus] Abrindo Quartus GUI (acesse Tools -> Netlist Viewers -> RTL Viewer)..."
-      nohup "\$QUARTUS_BIN/quartus" "\$top_name.qpf" >/dev/null 2>&1 &
+      launch_bg "\$QUARTUS_BIN/quartus" "\$top_name.qpf"
       ;;
   esac
 }
@@ -898,7 +906,7 @@ HELP
       exit 1
     fi
     echo "[quartus] Abrindo \$vcd_file no GTKWave..."
-    nohup gtkwave "\$vcd_file" >/dev/null 2>&1 &
+    launch_bg gtkwave "\$vcd_file"
   fi
 }
 
@@ -1130,7 +1138,7 @@ HELP
     return 0
   fi
   ensure_quartus
-  nohup "\$QUARTUS_BIN/quartus" "\$@" >/dev/null 2>&1 &
+  launch_bg "\$QUARTUS_BIN/quartus" "\$@"
 }
 
 case "\${1:-help}" in

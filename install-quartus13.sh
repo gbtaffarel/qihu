@@ -607,7 +607,9 @@ async function main() {
         });
       }
 
-      circuit.on('postUpdate', updateSevenSeg);
+      segViews.forEach(({ cell }) => cell.on('change:inputSignals', updateSevenSeg));
+      circuit.on('postUpdate userChange', updateSevenSeg);
+      if (segViews.length > 0) setInterval(updateSevenSeg, 120);
       circuit.start();
       updateSevenSeg();
       start.on('click', () => circuit.start());

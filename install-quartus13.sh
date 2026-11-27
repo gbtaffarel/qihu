@@ -439,17 +439,42 @@ HELP
       srcs=("\$@")
     fi
   else
-    # Se só o toplevel foi passado, coleta os demais .v/.sv do diretório (ignorando testbenches)
-    shopt -s nullglob
-    for f in *.v *.sv; do
-      case "\$f" in
-        *tb*.v|*testbench*.v|*tb*.sv|*testbench*.sv) continue ;;
-        *) srcs+=("\$f") ;;
-      esac
-    done
-    shopt -u nullglob
-    if [[ \${#srcs[@]} -eq 0 && -f "\$top_arg" ]]; then
-      srcs=("\$top_arg")
+    # 1) Se existir <top_name>.qsf, usa exatamente os arquivos declarados no projeto
+    if [[ -f "\$top_name.qsf" ]]; then
+      while IFS= read -r qsf_file; do
+        [[ -n "\$qsf_file" && -f "\$qsf_file" ]] && srcs+=("\$qsf_file")
+      done < <(grep -E 'set_global_assignment[[:space:]]+-name[[:space:]]+(SYSTEM)?VERILOG_FILE[[:space:]]+' "\$top_name.qsf" | sed -E 's/.*VERILOG_FILE[[:space:]]+//; s/[[:space:]]*$//; s/^"//; s/"$//' | tr -d '\r')
+    fi
+
+    # 2) Se não há .qsf, testa se o arquivo top-level é autocontido (evita colisão com outros .v da pasta)
+    local top_file=""
+    if [[ -f "\$top_arg" ]]; then
+      top_file="\$top_arg"
+    elif [[ -f "\$top_name.v" ]]; then
+      top_file="\$top_name.v"
+    elif [[ -f "\$top_name.sv" ]]; then
+      top_file="\$top_name.sv"
+    fi
+
+    if [[ \${#srcs[@]} -eq 0 && -n "\$top_file" ]] && command -v yosys >/dev/null 2>&1; then
+      if yosys -q -p "read_verilog \$top_file; hierarchy -check -top \$top_name" >/dev/null 2>&1; then
+        srcs=("\$top_file")
+      fi
+    fi
+
+    # 3) Fallback: coleta os demais .v/.sv do diretório (ignorando testbenches)
+    if [[ \${#srcs[@]} -eq 0 ]]; then
+      shopt -s nullglob
+      for f in *.v *.sv; do
+        case "\$f" in
+          *tb*.v|*testbench*.v|*tb*.sv|*testbench*.sv) continue ;;
+          *) srcs+=("\$f") ;;
+        esac
+      done
+      shopt -u nullglob
+      if [[ \${#srcs[@]} -eq 0 && -n "\$top_file" ]]; then
+        srcs=("\$top_file")
+      fi
     fi
   fi
 

@@ -1,4 +1,4 @@
-# Quartus I Hate You
+# Quartus, I Hate You
 
 Script para instalar o **Altera Quartus II 13.0 SP1 Web Edition** localmente no Linux e disponibilizar o comando `qihu` no `PATH`.
 
